@@ -1,49 +1,60 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  ChevronRight,
+  ClipboardList,
   Eye,
+  Filter,
   LockKeyhole,
   Play,
   Radar,
+  RefreshCw,
+  Search,
   ShieldCheck,
   Terminal,
+  X,
 } from "lucide-react";
 import "./styles.css";
+import { filterAlerts, filterEvents, isActiveAlert } from "./domain.js";
 
 const API = import.meta.env.VITE_API_URL || "";
 
-async function api(path, token, options = {}) {
+async function rawRequest(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
+    headers: { "Content-Type": "application/json", ...options.headers },
   });
-  if (!response.ok) throw new Error((await response.json()).detail || "Request failed");
-  return response.json();
+  if (response.status === 204) return null;
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(body.detail || "Request failed");
+    error.status = response.status;
+    throw error;
+  }
+  return body;
 }
 
 function Login({ onLogin }) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("change-me-before-production");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function submit(event) {
     event.preventDefault();
-    setError("");
+    setError(""); setBusy(true);
     try {
-      const data = await api("/api/v1/auth/login", "", {
+      onLogin(await rawRequest("/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
-      });
-      onLogin(data.access_token);
+      }));
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -55,16 +66,17 @@ function Login({ onLogin }) {
         <h1>See the signal.<br />Explain the risk.</h1>
         <p className="login-copy">Behavior analytics and explainable threat detection for authentication and API activity.</p>
         <form onSubmit={submit}>
-          <label>Username<input value={username} onChange={(e) => setUsername(e.target.value)} /></label>
-          <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-          {error && <p className="error">{error}</p>}
-          <button className="primary" type="submit"><LockKeyhole size={17} /> Enter analyst console</button>
+          <label>Username<input autoComplete="username" placeholder="Analyst username" value={username} onChange={(e) => setUsername(e.target.value)} required /></label>
+          <label>Password<input autoComplete="current-password" placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {error && <p className="error" role="alert">{error}</p>}
+          <button className="primary" type="submit" disabled={busy}><LockKeyhole size={17} /> {busy ? "Authenticating…" : "Enter analyst console"}</button>
         </form>
+        <p className="demo-hint">Local demo credentials are configured through environment variables.</p>
       </section>
       <section className="login-visual" aria-hidden="true">
         <div className="orb"><div className="orb-inner"><ShieldCheck size={46} /></div></div>
-        <div className="signal-card one"><span>Behavior score</span><strong>94</strong><small>high confidence anomaly</small></div>
-        <div className="signal-card two"><span>Rule match</span><strong>T1110</strong><small>Brute Force</small></div>
+        <div className="signal-card one"><span>Behavior model</span><strong>v2</strong><small>adaptive baseline online</small></div>
+        <div className="signal-card two"><span>Rule mapping</span><strong>T1110</strong><small>Brute Force</small></div>
       </section>
     </main>
   );
@@ -74,99 +86,191 @@ function Metric({ icon: Icon, label, value, tone }) {
   return <article className={`metric ${tone || ""}`}><div className="metric-icon"><Icon size={19} /></div><div><span>{label}</span><strong>{value}</strong></div></article>;
 }
 
-function Dashboard({ token, onLogout }) {
-  const [summary, setSummary] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [running, setRunning] = useState("");
-  const [notice, setNotice] = useState("");
+function Severity({ value }) {
+  return <span className={`severity ${value}`}>{value}</span>;
+}
 
-  async function refresh() {
-    const [summaryData, alertsData, eventsData] = await Promise.all([
-      api("/api/v1/dashboard/summary", token),
-      api("/api/v1/alerts?limit=20", token),
-      api("/api/v1/events?limit=8", token),
-    ]);
-    setSummary(summaryData); setAlerts(alertsData); setEvents(eventsData);
-  }
-
-  useEffect(() => { refresh().catch((e) => setNotice(e.message)); }, []);
-
-  async function simulate(name) {
-    setRunning(name); setNotice("");
-    try {
-      const result = await api(`/api/v1/simulations/${name}`, token, { method: "POST" });
-      setNotice(`${result.events_created} events analyzed · ${result.alerts_created} alerts created`);
-      await refresh();
-    } catch (e) { setNotice(e.message); }
-    finally { setRunning(""); }
-  }
-
-  async function resolve(id) {
-    await api(`/api/v1/alerts/${id}`, token, { method: "PATCH", body: JSON.stringify({ status: "resolved" }) });
-    await refresh();
-  }
-
-  const maxEvent = useMemo(() => Math.max(1, ...Object.values(summary?.event_type_counts || {})), [summary]);
-  if (!summary) return <div className="loading"><Radar className="spin" /> Loading security telemetry…</div>;
-
+function AlertRow({ alert, onSelect, onStatus }) {
   return (
-    <div className="app-shell">
-      <aside>
-        <div className="brand"><div className="brand-mark small"><Radar size={20} /></div><div><strong>SentinelScope</strong><span>Security operations</span></div></div>
-        <nav><a className="active"><Activity size={18} /> Overview</a><a><AlertTriangle size={18} /> Alerts <b>{summary.open_alerts}</b></a><a><Terminal size={18} /> Event stream</a><a><Eye size={18} /> Detection lab</a></nav>
-        <div className="system-state"><span><i /> Detection online</span><small>Rules + behavioral model</small></div>
-      </aside>
-      <main className="dashboard">
-        <header><div><p className="eyebrow">SECURITY OPERATIONS CENTER</p><h1>Threat overview</h1><p>Authentication and API behavior across the monitored environment.</p></div><button className="ghost" onClick={onLogout}>Sign out</button></header>
-        <section className="metrics">
-          <Metric icon={Activity} label="Events analyzed" value={summary.total_events} />
-          <Metric icon={AlertTriangle} label="Open alerts" value={summary.open_alerts} tone="warning" />
-          <Metric icon={ShieldCheck} label="Critical findings" value={summary.critical_alerts} tone="danger" />
-          <Metric icon={Radar} label="Average risk" value={`${summary.average_risk}/100`} tone="cyan" />
-        </section>
-
-        <section className="grid-main">
-          <article className="panel alerts-panel">
-            <div className="panel-head"><div><p className="eyebrow">PRIORITIZED FINDINGS</p><h2>Active alerts</h2></div><span>{alerts.length} total</span></div>
-            <div className="alert-list">
-              {alerts.length === 0 && <div className="empty"><ShieldCheck size={32} /><strong>No active alerts</strong><span>Run a safe scenario to test detection.</span></div>}
-              {alerts.map((alert) => <div className="alert-row" key={alert.id}>
-                <span className={`severity ${alert.severity}`}>{alert.severity}</span>
-                <div className="alert-body"><strong>{alert.title}</strong><p>{alert.explanation}</p><div><code>{alert.mitre_technique}</code><span>Risk {alert.risk_score}</span></div></div>
-                {alert.status !== "resolved" ? <button className="resolve" onClick={() => resolve(alert.id)}><CheckCircle2 size={16} /> Resolve</button> : <span className="resolved">Resolved</span>}
-              </div>)}
-            </div>
-          </article>
-
-          <article className="panel lab-panel">
-            <div className="panel-head"><div><p className="eyebrow">CONTROLLED TESTING</p><h2>Detection lab</h2></div><Play size={18} /></div>
-            <p>Generate application events safely. No external system is contacted.</p>
-            {[['brute_force','Brute-force login','6 failed attempts'],['privilege_escalation','Privilege escalation','Denied admin role'],['unusual_login','Unusual login','02:17 UTC activity'],['normal','Normal activity','Expected API access']].map(([id,title,desc]) =>
-              <button className="scenario" disabled={!!running} onClick={() => simulate(id)} key={id}><span><strong>{title}</strong><small>{desc}</small></span><Play size={16} className={running === id ? 'spin' : ''} /></button>
-            )}
-            {notice && <div className="notice">{notice}</div>}
-          </article>
-        </section>
-
-        <section className="grid-bottom">
-          <article className="panel"><div className="panel-head"><div><p className="eyebrow">EVENT DISTRIBUTION</p><h2>Telemetry</h2></div></div>
-            <div className="bars">{Object.entries(summary.event_type_counts).map(([type,count]) => <div className="bar-row" key={type}><span>{type.replace('_',' ')}</span><div><i style={{width:`${count/maxEvent*100}%`}} /></div><b>{count}</b></div>)}</div>
-          </article>
-          <article className="panel"><div className="panel-head"><div><p className="eyebrow">LATEST ACTIVITY</p><h2>Event stream</h2></div></div>
-            <div className="event-list">{events.map((event) => <div key={event.id}><span className={`event-dot ${event.outcome}`} /><p><strong>{event.event_type.replace('_',' ')}</strong><small>{event.user_id} · {event.ip_address}</small></p><b>{event.risk_score}</b></div>)}</div>
-          </article>
-        </section>
-      </main>
+    <div className="alert-row">
+      <Severity value={alert.severity} />
+      <button className="alert-body alert-open" onClick={() => onSelect(alert)}>
+        <strong>{alert.title}</strong><p>{alert.explanation}</p>
+        <div><code>{alert.mitre_technique || "Behavioral signal"}</code><span>Risk {alert.risk_score}</span><span>{alert.status.replace("_", " ")}</span></div>
+      </button>
+      {!["resolved", "false_positive"].includes(alert.status)
+        ? <button className="resolve" onClick={() => onStatus(alert.id, "resolved")}><CheckCircle2 size={16} /> Resolve</button>
+        : <span className="resolved">{alert.status.replace("_", " ")}</span>}
     </div>
   );
 }
 
+function Overview({ summary, alerts, events, onSelect, onStatus }) {
+  const maxEvent = Math.max(1, ...Object.values(summary.event_type_counts || {}));
+  const activeAlerts = alerts.filter(isActiveAlert);
+  return <>
+    <section className="metrics">
+      <Metric icon={Activity} label="Events analyzed" value={summary.total_events} />
+      <Metric icon={AlertTriangle} label="Active alerts" value={summary.open_alerts} tone="warning" />
+      <Metric icon={ShieldCheck} label="Active critical" value={summary.critical_alerts} tone="danger" />
+      <Metric icon={Radar} label="Average risk" value={`${summary.average_risk}/100`} tone="cyan" />
+    </section>
+    <section className="grid-main">
+      <article className="panel alerts-panel">
+        <div className="panel-head"><div><p className="eyebrow">PRIORITIZED FINDINGS</p><h2>Active alerts</h2></div><span>{activeAlerts.length} shown</span></div>
+        <div className="alert-list">
+          {activeAlerts.length === 0 && <div className="empty"><ShieldCheck size={32} /><strong>No active alerts</strong><span>Run a controlled scenario or ingest telemetry.</span></div>}
+          {activeAlerts.slice(0, 6).map((alert) => <AlertRow key={alert.id} alert={alert} onSelect={onSelect} onStatus={onStatus} />)}
+        </div>
+      </article>
+      <article className="panel posture-panel">
+        <div className="panel-head"><div><p className="eyebrow">SECURITY POSTURE</p><h2>Severity mix</h2></div><Radar size={18} /></div>
+        {['critical', 'high', 'medium'].map((severity) => <div className="posture-row" key={severity}><span>{severity}</span><strong>{summary.severity_counts[severity] || 0}</strong></div>)}
+        <p className="muted-note">Only open and investigating alerts contribute to active posture metrics.</p>
+      </article>
+    </section>
+    <section className="grid-bottom">
+      <article className="panel"><div className="panel-head"><div><p className="eyebrow">EVENT DISTRIBUTION</p><h2>Telemetry</h2></div></div>
+        <div className="bars">{Object.entries(summary.event_type_counts).map(([type,count]) => <div className="bar-row" key={type}><span>{type.replaceAll('_',' ')}</span><div><i style={{width:`${count/maxEvent*100}%`}} /></div><b>{count}</b></div>)}</div>
+      </article>
+      <article className="panel"><div className="panel-head"><div><p className="eyebrow">LATEST ACTIVITY</p><h2>Event stream</h2></div></div>
+        <div className="event-list">{events.slice(0, 8).map((event) => <div key={event.id}><span className={`event-dot ${event.outcome}`} /><p><strong>{event.event_type.replaceAll('_',' ')}</strong><small>{event.user_id} · {event.ip_address} · {event.source}</small></p><b>{event.risk_score}</b></div>)}</div>
+      </article>
+    </section>
+  </>;
+}
+
+function AlertsView({ alerts, onSelect, onStatus }) {
+  const [status, setStatus] = useState("active");
+  const [severity, setSeverity] = useState("all");
+  const filtered = filterAlerts(alerts, status, severity);
+  return <article className="panel page-panel">
+    <div className="panel-head"><div><p className="eyebrow">ALERT MANAGEMENT</p><h2>Findings queue</h2></div><Filter size={18} /></div>
+    <div className="filters">
+      <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">Active</option><option value="all">All statuses</option><option value="resolved">Resolved</option><option value="false_positive">False positive</option></select>
+      <select value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="all">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select>
+      <span>{filtered.length} findings</span>
+    </div>
+    <div className="alert-list full-list">{filtered.map((alert) => <AlertRow key={alert.id} alert={alert} onSelect={onSelect} onStatus={onStatus} />)}</div>
+  </article>;
+}
+
+function EventsView({ events }) {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("all");
+  const filtered = filterEvents(events, type, query);
+  return <article className="panel page-panel">
+    <div className="panel-head"><div><p className="eyebrow">SEARCHABLE TELEMETRY</p><h2>Event stream</h2></div><Terminal size={18} /></div>
+    <div className="filters"><label className="search-box"><Search size={15} /><input placeholder="User, IP or endpoint" value={query} onChange={(e) => setQuery(e.target.value)} /></label><select value={type} onChange={(e) => setType(e.target.value)}><option value="all">All event types</option><option value="login">Login</option><option value="api_access">API access</option><option value="authorization_failure">Authorization failure</option><option value="role_change">Role change</option></select></div>
+    <div className="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>User</th><th>Source IP</th><th>Outcome</th><th>Source</th><th>Risk</th></tr></thead><tbody>{filtered.map((event) => <tr key={event.id}><td>{new Date(event.timestamp).toLocaleString()}</td><td>{event.event_type.replaceAll('_',' ')}</td><td>{event.user_id}</td><td><code>{event.ip_address}</code></td><td><span className={`outcome ${event.outcome}`}>{event.outcome}</span></td><td>{event.source}</td><td><b>{event.risk_score}</b></td></tr>)}</tbody></table></div>
+  </article>;
+}
+
+function LabView({ runScenario, running, notice, detection }) {
+  const scenarios = [
+    ['brute_force','Brute-force login','Six failed attempts from one IP'],
+    ['privilege_escalation','Privilege escalation','Denied administrative role change'],
+    ['unusual_login','Unusual login','Successful authentication at 02:17 UTC'],
+    ['rapid_country_change','Rapid country change','Successful logins from two countries'],
+    ['normal','Normal activity','Expected API access without an alert'],
+  ];
+  return <section className="lab-grid">
+    <article className="panel page-panel"><div className="panel-head"><div><p className="eyebrow">CONTROLLED TESTING</p><h2>Detection scenarios</h2></div><Play size={18} /></div><p className="section-copy">Generate application events safely. No external system is contacted.</p>{scenarios.map(([id,title,desc]) => <button className="scenario" disabled={!!running} onClick={() => runScenario(id)} key={id}><span><strong>{title}</strong><small>{desc}</small></span><Play size={16} className={running === id ? 'spin' : ''} /></button>)}{notice && <div className="notice">{notice}</div>}</article>
+    <article className="panel page-panel"><div className="panel-head"><div><p className="eyebrow">DETECTION ENGINE</p><h2>Model health</h2></div><ShieldCheck size={18} /></div>{detection && <div className="health-grid"><span>Model version<strong>{detection.model_version}</strong></span><span>Alert threshold<strong>{detection.alert_threshold}/100</strong></span><span>Personal baseline<strong>{detection.minimum_personal_baseline} events</strong></span><span>Active rules<strong>{detection.rules.length}</strong></span></div>}<h3>Service ingestion</h3><pre><code>{`POST /api/v1/ingest/events\nX-Ingestion-Key: ••••••••\n\n{ "events": [ ... ] }`}</code></pre><p className="muted-note">Collectors use a separate service credential; analyst JWTs are not accepted for machine ingestion.</p></article>
+  </section>;
+}
+
+function AuditView({ audits }) {
+  return <article className="panel page-panel"><div className="panel-head"><div><p className="eyebrow">ACCOUNTABILITY</p><h2>Audit trail</h2></div><ClipboardList size={18} /></div><div className="audit-list">{audits.map((item) => <div key={item.id}><span>{new Date(item.created_at).toLocaleString()}</span><strong>{item.action.replaceAll('_',' ')}</strong><p>{item.actor} · {item.target_type} #{item.target_id}</p></div>)}</div></article>;
+}
+
+function AlertDrawer({ alert, onClose, onStatus }) {
+  if (!alert) return null;
+  return <div className="drawer-backdrop" onClick={onClose}><aside className="alert-drawer" onClick={(event) => event.stopPropagation()}><button className="drawer-close" onClick={onClose}><X /></button><Severity value={alert.severity} /><h2>{alert.title}</h2><div className="risk-display"><span>Risk score</span><strong>{alert.risk_score}</strong></div><p>{alert.explanation}</p><h3>Evidence</h3><ul>{alert.evidence.map((item) => <li key={item}>{item}</li>)}</ul><h3>MITRE ATT&CK</h3><code>{alert.mitre_technique || "Behavioral anomaly"}</code><label>Status<select value={alert.status} onChange={(e) => onStatus(alert.id, e.target.value)}><option value="open">Open</option><option value="investigating">Investigating</option><option value="resolved">Resolved</option><option value="false_positive">False positive</option></select></label></aside></div>;
+}
+
+function Dashboard({ request, onLogout }) {
+  const [view, setView] = useState("overview");
+  const [summary, setSummary] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [audits, setAudits] = useState([]);
+  const [detection, setDetection] = useState(null);
+  const [selectedAlert, setSelectedAlert] = useState(null);
+  const [running, setRunning] = useState("");
+  const [notice, setNotice] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const refresh = useCallback(async (quiet = false) => {
+    try {
+      const [summaryData, alertsData, eventsData, auditData, detectionData] = await Promise.all([
+        request("/api/v1/dashboard/summary"), request("/api/v1/alerts?limit=100"),
+        request("/api/v1/events?limit=200"), request("/api/v1/audit-logs?limit=100"),
+        request("/api/v1/detection/health"),
+      ]);
+      setSummary(summaryData); setAlerts(alertsData); setEvents(eventsData); setAudits(auditData); setDetection(detectionData); setLastUpdated(new Date());
+    } catch (error) { if (!quiet) setNotice(error.message); }
+  }, [request]);
+
+  useEffect(() => { refresh(); const timer = setInterval(() => refresh(true), 10_000); return () => clearInterval(timer); }, [refresh]);
+
+  async function runScenario(name) {
+    setRunning(name); setNotice("");
+    try { const result = await request(`/api/v1/simulations/${name}`, { method: "POST" }); setNotice(`${result.events_created} events analyzed · ${result.alerts_created} alerts created`); await refresh(); }
+    catch (error) { setNotice(error.message); } finally { setRunning(""); }
+  }
+
+  async function updateStatus(id, status) {
+    setNotice("");
+    try {
+      const updated = await request(`/api/v1/alerts/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+      setSelectedAlert((current) => current?.id === id ? updated : current); await refresh(true);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
+  if (!summary) return <div className="loading"><Radar className="spin" /> Loading security telemetry…</div>;
+  const nav = [
+    ["overview", Activity, "Overview"], ["alerts", AlertTriangle, "Alerts"],
+    ["events", Terminal, "Event stream"], ["lab", Eye, "Detection lab"],
+    ["audit", ClipboardList, "Audit trail"],
+  ];
+  return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark small"><Radar size={20} /></div><div><strong>SentinelScope</strong><span>Security operations</span></div></div><nav>{nav.map(([id,Icon,label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "alerts" && summary.open_alerts > 0 && <b>{summary.open_alerts}</b>}<ChevronRight className="nav-arrow" size={14} /></button>)}</nav><div className="system-state"><span><i /> Detection online</span><small>{detection?.model_version} · auto-refresh 10s</small></div></aside><main className="dashboard"><header><div><p className="eyebrow">SECURITY OPERATIONS CENTER</p><h1>{nav.find(([id]) => id === view)?.[2]}</h1><p>{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : "Connecting to telemetry…"}</p></div><div className="header-actions"><button className="ghost" onClick={() => refresh()}><RefreshCw size={15} /> Refresh</button><button className="ghost" onClick={onLogout}>Sign out</button></div></header>{notice && view !== "lab" && <div className="global-notice" role="alert">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}{view === "overview" && <Overview summary={summary} alerts={alerts} events={events} onSelect={setSelectedAlert} onStatus={updateStatus} />}{view === "alerts" && <AlertsView alerts={alerts} onSelect={setSelectedAlert} onStatus={updateStatus} />}{view === "events" && <EventsView events={events} />}{view === "lab" && <LabView runScenario={runScenario} running={running} notice={notice} detection={detection} />}{view === "audit" && <AuditView audits={audits} />}</main><AlertDrawer alert={selectedAlert} onClose={() => setSelectedAlert(null)} onStatus={updateStatus} /></div>;
+}
+
 function App() {
-  const [token, setToken] = useState(() => sessionStorage.getItem("sentinel_token"));
-  function login(value) { sessionStorage.setItem("sentinel_token", value); setToken(value); }
-  function logout() { sessionStorage.removeItem("sentinel_token"); setToken(null); }
-  return token ? <Dashboard token={token} onLogout={logout} /> : <Login onLogin={login} />;
+  const [auth, setAuth] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("sentinel_auth")) || null; } catch { return null; }
+  });
+  const authRef = useRef(auth);
+  const refreshPromise = useRef(null);
+  const saveAuth = useCallback((value) => { authRef.current = value; if (value) sessionStorage.setItem("sentinel_auth", JSON.stringify(value)); else sessionStorage.removeItem("sentinel_auth"); setAuth(value); }, []);
+  const request = useCallback(async (path, options = {}) => {
+    const requestAuth = authRef.current;
+    if (!requestAuth) throw new Error("Authentication required");
+    try { return await rawRequest(path, { ...options, headers: { Authorization: `Bearer ${requestAuth.access_token}`, ...options.headers } }); }
+    catch (error) {
+      if (error.status !== 401 || path.includes("/auth/")) throw error;
+      try {
+        const latestAuth = authRef.current;
+        if (latestAuth && latestAuth.access_token !== requestAuth.access_token) {
+          return rawRequest(path, { ...options, headers: { Authorization: `Bearer ${latestAuth.access_token}`, ...options.headers } });
+        }
+        if (!refreshPromise.current) {
+          refreshPromise.current = rawRequest("/api/v1/auth/refresh", {
+            method: "POST",
+            body: JSON.stringify({ refresh_token: latestAuth.refresh_token }),
+          }).then((renewed) => { saveAuth(renewed); return renewed; })
+            .finally(() => { refreshPromise.current = null; });
+        }
+        const renewed = await refreshPromise.current;
+        return rawRequest(path, { ...options, headers: { Authorization: `Bearer ${renewed.access_token}`, ...options.headers } });
+      } catch { saveAuth(null); throw new Error("Your session expired. Please sign in again."); }
+    }
+  }, [saveAuth]);
+  async function logout() { try { if (auth) await rawRequest("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refresh_token: auth.refresh_token }) }); } finally { saveAuth(null); } }
+  return auth ? <Dashboard request={request} onLogout={logout} /> : <Login onLogin={saveAuth} />;
 }
 
 createRoot(document.getElementById("root")).render(<App />);

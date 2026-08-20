@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: sentinel_scope
       POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: sentinel-local
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinel-local}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel_scope"]
       interval: 5s
@@ -16,22 +16,31 @@ services:
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://sentinel:sentinel-local@db:5432/sentinel_scope
+      DATABASE_URL: postgresql+psycopg://sentinel:${POSTGRES_PASSWORD:-sentinel-local}@db:5432/sentinel_scope
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-before-production}
+      INGESTION_API_KEY: ${INGESTION_API_KEY:-local-ingestion-key-change-me}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   web:
     build: ./frontend
     ports:
       - "5173:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from .schemas import EventCreate
 
 
 def build_scenario(name: str) -> list[EventCreate]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if name == "brute_force":
         return [
             EventCreate(
@@ -14,6 +14,7 @@ def build_scenario(name: str) -> list[EventCreate]:
                 ip_address="203.0.113.42",
                 country="TR",
                 endpoint="/auth/login",
+                source="simulator",
                 timestamp=now + timedelta(seconds=i),
                 details={"scenario": name, "attempt": i + 1},
             )
@@ -29,6 +30,7 @@ def build_scenario(name: str) -> list[EventCreate]:
                 country="TR",
                 endpoint="/admin/users/user-104/role",
                 role="user",
+                source="simulator",
                 timestamp=now,
                 details={"scenario": name, "requested_role": "admin"},
             )
@@ -43,6 +45,7 @@ def build_scenario(name: str) -> list[EventCreate]:
                 ip_address="192.0.2.77",
                 country="DE",
                 endpoint="/auth/login",
+                source="simulator",
                 timestamp=unusual,
                 details={"scenario": name},
             )
@@ -56,8 +59,34 @@ def build_scenario(name: str) -> list[EventCreate]:
                 ip_address="10.0.0.24",
                 country="TR",
                 endpoint="/api/profile",
+                source="simulator",
                 timestamp=now,
                 details={"scenario": name},
             )
+        ]
+    if name == "rapid_country_change":
+        return [
+            EventCreate(
+                user_id="traveling-admin",
+                event_type="login",
+                outcome="success",
+                ip_address="192.0.2.14",
+                country="TR",
+                endpoint="/auth/login",
+                source="simulator",
+                timestamp=now,
+                details={"scenario": name, "step": 1},
+            ),
+            EventCreate(
+                user_id="traveling-admin",
+                event_type="login",
+                outcome="success",
+                ip_address="198.51.100.91",
+                country="DE",
+                endpoint="/auth/login",
+                source="simulator",
+                timestamp=now + timedelta(minutes=2),
+                details={"scenario": name, "step": 2},
+            ),
         ]
     raise ValueError("Unknown scenario")

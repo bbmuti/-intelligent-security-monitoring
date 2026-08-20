@@ -1,0 +1,2 @@
+{"user_id":"employee-17","event_type":"login","outcome":"success","ip_address":"10.0.0.17","country":"TR","endpoint":"/auth/login","source":"sample-collector","details":{"device":"managed-laptop"}}
+{"user_id":"employee-17","event_type":"api_access","outcome":"success","ip_address":"10.0.0.17","country":"TR","endpoint":"/api/profile","source":"sample-collector","details":{"status_code":200}}

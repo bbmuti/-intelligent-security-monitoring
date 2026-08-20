@@ -1,50 +1,82 @@
 import hashlib
 import hmac
-from datetime import datetime, timedelta, timezone
+import secrets
+import uuid
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .database import get_db
+from .models import AnalystUser
 
 security = HTTPBearer()
 
 
-def _password_digest(password: str, salt: str) -> str:
+def password_digest(password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 210_000).hex()
 
 
-def verify_demo_credentials(username: str, password: str) -> bool:
-    settings = get_settings()
-    user_ok = hmac.compare_digest(username, settings.admin_username)
-    expected = _password_digest(settings.admin_password, settings.admin_username)
-    supplied = _password_digest(password, settings.admin_username)
-    return user_ok and hmac.compare_digest(expected, supplied)
+def hash_password(password: str) -> tuple[str, str]:
+    salt = secrets.token_hex(16)
+    return password_digest(password, salt), salt
 
 
-def create_access_token(subject: str) -> str:
+def verify_password(password: str, expected: str, salt: str) -> bool:
+    return hmac.compare_digest(password_digest(password, salt), expected)
+
+
+def create_token(subject: str, role: str, token_type: str, lifetime: timedelta, jti: str | None = None) -> str:
     settings = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": subject,
-        "role": "analyst",
+        "role": role,
+        "type": token_type,
+        "jti": jti or uuid.uuid4().hex,
         "iat": now,
-        "exp": now + timedelta(minutes=settings.access_token_minutes),
+        "exp": now + lifetime,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def require_analyst(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+def create_access_token(subject: str, role: str) -> str:
+    settings = get_settings()
+    return create_token(subject, role, "access", timedelta(minutes=settings.access_token_minutes))
+
+
+def create_refresh_token(subject: str, role: str, jti: str) -> str:
+    settings = get_settings()
+    return create_token(subject, role, "refresh", timedelta(days=settings.refresh_token_days), jti)
+
+
+def decode_token(token: str, expected_type: str) -> dict:
     settings = get_settings()
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
-    if payload.get("role") != "analyst":
-        raise HTTPException(status_code=403, detail="Analyst role required")
+    if payload.get("type") != expected_type:
+        raise HTTPException(status_code=401, detail="Incorrect token type")
     return payload
+
+
+def require_analyst(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+) -> AnalystUser:
+    payload = decode_token(credentials.credentials, "access")
+    user = db.scalar(select(AnalystUser).where(AnalystUser.username == payload.get("sub")))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User is inactive or unavailable")
+    if user.role not in {"analyst", "admin"}:
+        raise HTTPException(status_code=403, detail="Analyst role required")
+    return user
