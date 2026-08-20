@@ -31,7 +31,7 @@ jobs:
       - name: Lint
         run: ruff check app tests scripts migrations
       - name: Security scan
-        run: bandit -q -r app ../examples
+        run: bandit -q -r app scripts ../examples
       - name: Test with coverage gate
         run: python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=80
       - name: Run deterministic model smoke evaluation

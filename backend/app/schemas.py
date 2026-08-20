@@ -118,3 +118,4 @@ class DetectionHealth(BaseModel):
     alert_threshold: int
     minimum_personal_baseline: int
     rules: list[str]
+    integrations: list[str]

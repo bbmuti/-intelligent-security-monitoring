@@ -23,7 +23,7 @@ Every stored event receives an anomaly score and combined risk score. Findings a
 
 ## Current capabilities
 
-- Service-authenticated batch ingestion for real JSON/JSONL event sources
+- Service-authenticated batch ingestion for JSON/JSONL, Linux OpenSSH, and Windows Security Event Log sources
 - Analyst authentication with short-lived access tokens and rotating, revocable refresh sessions
 - Brute-force, unusual-hour login, repeated authorization failure, privilege-escalation, rapid-country-change, and behavioral-anomaly detection
 - A personal behavioral baseline after 30 successful events, with a deterministic global fallback before enough history exists
@@ -33,12 +33,13 @@ Every stored event receives an anomaly score and combined risk score. Findings a
 - Automatic dashboard refresh every 10 seconds
 - PostgreSQL deployment with Alembic migrations; SQLite for lightweight local development and tests
 - Docker Compose, health/readiness probes, CI, Bandit, Ruff, Dependabot, and coverage enforcement
+- Reproducible BETH real-telemetry benchmark with versioned results, dataset hashes, and explicit scope limitations
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    A["Applications / JSONL collector"] -->|"X-Ingestion-Key"| B["FastAPI ingestion"]
+    A["Windows / Linux / JSONL collectors"] -->|"X-Ingestion-Key"| B["FastAPI ingestion"]
     B --> C["Validation + 10-minute correlation"]
     C --> D["Detection rules"]
     C --> E["Isolation Forest"]
@@ -129,12 +130,43 @@ Vite proxies `/api`, `/health`, and `/ready` to the backend during local develop
 
 ## Ingest real event data
 
-The service ingestion route accepts batches of 1–100 events and is separated from analyst authentication. Set the same key used by the backend and run the dependency-free example collector:
+The service ingestion route accepts batches of 1–100 events and is separated from analyst authentication. All collectors use the same `X-Ingestion-Key` trust boundary and normalize records into the documented event schema.
+
+### JSON/JSONL
+
+Set the same key used by the backend and run the dependency-free example collector from the repository root:
 
 ```bash
 export SENTINELSCOPE_INGESTION_KEY="your-ingestion-key"
 python examples/python_collector.py examples/sample_events.jsonl
 ```
+
+### Linux OpenSSH
+
+The Linux collector parses standard `sshd` success and failure records. Preview the bundled sample without sending data:
+
+```bash
+cd backend
+export SENTINELSCOPE_INGESTION_KEY="your-ingestion-key"
+python -m scripts.collect_linux_auth --file ../examples/sample_auth.log --dry-run
+```
+
+Stream a live Debian/Ubuntu authentication log to a running API:
+
+```bash
+sudo -E python -m scripts.collect_linux_auth --follow --file /var/log/auth.log
+```
+
+### Windows Security Event Log
+
+Run PowerShell as an account allowed to read the Security log. Event IDs `4624` and `4625` are normalized as successful and failed login events:
+
+```powershell
+$env:SENTINELSCOPE_INGESTION_KEY="your-ingestion-key"
+powershell -ExecutionPolicy Bypass -File collectors/windows_security_eventlog.ps1 -DryRun
+```
+
+Remove `-DryRun` to send events to the API. Use `-Endpoint` and `-LookbackMinutes` to override the defaults. The script is a one-shot collector; avoid overlapping lookback windows unless duplicate ingestion is acceptable.
 
 Example event:
 
@@ -199,7 +231,7 @@ See [SECURITY.md](SECURITY.md) for reporting guidance and the current security b
 cd backend
 python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=80
 ruff check app tests scripts migrations
-bandit -q -r app ../examples
+bandit -q -r app scripts ../examples
 python -m scripts.evaluate_model
 
 cd ../frontend
@@ -207,11 +239,19 @@ npm test
 npm run build
 ```
 
-Current local verification: **29 backend tests**, **3 frontend domain tests**, and **93.05% backend branch coverage**. CI independently validates a clean Alembic migration, linting, security scanning, tests, the model smoke evaluation, and the production frontend build.
+Current local verification: **39 backend tests**, **3 frontend domain tests**, and **93.02% backend branch coverage**. CI independently validates a clean Alembic migration, linting, security scanning, tests, the model smoke evaluation, and the production frontend build.
 
 ### Model evaluation scope
 
 `backend/artifacts/model-evaluation.json` records a deterministic 180-sample synthetic smoke evaluation. Its current precision, recall, and F1 are `1.00` because the samples intentionally represent the rules' known regression boundaries. This is useful for catching behavioral regressions, but it is **not a production accuracy claim** and must not be compared with a real-world intrusion dataset benchmark.
+
+For real telemetry, `backend/scripts/benchmark_beth.py` provides a reproducible external BETH evaluation with deterministic sampling, input hashes, class counts, threshold methodology, and imbalance-aware metrics. On the version 3 BETH split sampled at 100,000 records per stage, the frozen test result is **97.16% precision, 91.45% recall, and 94.22% F1**. The benign test false-positive rate is **13.97%**, so this remains an algorithm-family research result rather than a production-readiness claim. It validates Isolation Forest on process telemetry; it does **not** claim end-to-end accuracy for SentinelScope's authentication schema. See the [methodology](docs/BENCHMARKING.md) and [versioned report](backend/artifacts/beth-benchmark.json).
+
+## Demo and CV material
+
+- [90-second demonstration script](docs/DEMO.md)
+- [CV bullets and interview preparation](docs/CV_PROJECT_DESCRIPTION.md)
+- [Public-release checklist](docs/PUBLIC_RELEASE_CHECKLIST.md)
 
 ## Repository structure
 
@@ -220,10 +260,12 @@ Current local verification: **29 backend tests**, **3 frontend domain tests**, a
 ├── backend/
 │   ├── app/                    # API, auth, models, detection, simulations
 │   ├── migrations/             # Alembic database history
-│   ├── scripts/                # Deterministic evaluation tooling
+│   ├── scripts/                # Collectors and reproducible evaluation tooling
 │   ├── artifacts/              # Versioned evaluation result
 │   └── tests/                  # API, schema, and detection tests
-├── examples/                   # JSONL collector and sample events
+├── collectors/                 # Windows Security Event Log collector
+├── docs/                       # Benchmark, demo, CV, and release guidance
+├── examples/                   # JSONL collector and safe sample telemetry
 ├── frontend/src/               # Dashboard and domain tests
 ├── .github/workflows/          # Automated quality and security checks
 └── docker-compose.yml          # PostgreSQL, API, and web stack
@@ -232,6 +274,7 @@ Current local verification: **29 backend tests**, **3 frontend domain tests**, a
 ## Honest limitations
 
 - The fallback model is trained on deterministic synthetic normal behavior until enough per-user history exists.
+- The external BETH harness evaluates process telemetry, not the complete authentication/API detection pipeline; its 13.97% benign test false-positive rate requires improvement before operational use.
 - Personal Isolation Forest models are trained on demand and are not yet persisted or monitored for drift.
 - Rapid country change is correlation-based; it does not calculate physical travel feasibility or use GeoIP lookup.
 - The in-memory login limiter is suitable for this single-process MVP, not a horizontally scaled deployment.

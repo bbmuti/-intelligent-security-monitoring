@@ -1,0 +1,67 @@
+{
+  "benchmark": "BETH real cybersecurity process events",
+  "algorithm": "IsolationForest",
+  "evaluation_scope": "Algorithm-family validation; not an end-to-end authentication detector benchmark.",
+  "dataset": {
+    "paper": "BETH Dataset: Real Cybersecurity Data for Unsupervised Anomaly Detection Research",
+    "license": "CC0-1.0",
+    "source": "https://www.kaggle.com/datasets/katehighnam/beth-dataset",
+    "version": 3,
+    "train_sha256": "18ceb80a7eb4b71296df13e3967e074a81ed5b80c2212b044c061ac81a1797e2",
+    "validation_sha256": "5a08ec47060af1cb8bb24ba632b5db0c2b1ac783aedc72693247b87c1170192e",
+    "test_sha256": "e56aad64df13b9dde7be2d333f1f6b7da7f41596cb9b4105deb0fd051900706b"
+  },
+  "features": [
+    "time_sin",
+    "time_cos",
+    "process_is_non_kernel",
+    "parent_is_non_kernel",
+    "user_is_unprivileged",
+    "mount_namespace_is_unusual",
+    "event_id_bucket",
+    "argument_count",
+    "return_value_class"
+  ],
+  "sampling": {
+    "seeds": {
+      "train": 42,
+      "validation": 43,
+      "test": 44
+    },
+    "eligible_benign_train_rows": 763144,
+    "sampled_train_rows": 100000,
+    "eligible_validation_rows": 188967,
+    "sampled_validation_rows": 100000,
+    "validation_attack_rows": 0,
+    "eligible_test_rows": 188967,
+    "sampled_test_rows": 100000,
+    "test_attack_rows": 83911
+  },
+  "threshold": {
+    "method": "percentile of the separate benign validation anomaly scores",
+    "percentile": 95.0,
+    "value": 0.118519
+  },
+  "validation_false_positive_rate": 0.0503,
+  "metrics": {
+    "accuracy": 0.9058,
+    "precision": 0.9716,
+    "recall": 0.9145,
+    "f1": 0.9422,
+    "roc_auc": 0.8449,
+    "average_precision": 0.9382,
+    "false_positive_rate": 0.1397,
+    "confusion_matrix": {
+      "tn": 13842,
+      "fp": 2247,
+      "fn": 7176,
+      "tp": 76735
+    }
+  },
+  "limitations": [
+    "BETH contains host process telemetry rather than SentinelScope authentication/API events.",
+    "Results validate the Isolation Forest algorithm family, not the full hybrid rule engine.",
+    "The decision threshold is calibrated on the official benign-only validation split.",
+    "Class imbalance makes accuracy insufficient; recall, precision, AUROC, AP, and FPR are reported."
+  ]
+}

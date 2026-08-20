@@ -389,6 +389,7 @@ def detection_health(_: AnalystUser = Depends(require_analyst)) -> DetectionHeal
         alert_threshold=ALERT_THRESHOLD,
         minimum_personal_baseline=MINIMUM_PERSONAL_BASELINE,
         rules=DetectionEngine.RULES,
+        integrations=["JSON/JSONL", "Linux OpenSSH auth.log", "Windows Security Event Log"],
     )
 
 

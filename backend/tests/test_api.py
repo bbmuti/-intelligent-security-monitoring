@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from app.config import Settings
 from app.database import Base, engine
+from app.integrations.linux_auth import parse_linux_auth_line
 from app.main import app
 
 
@@ -107,6 +108,23 @@ def test_batch_ingestion_requires_service_key(client: TestClient):
     )
     assert response.status_code == 200
     assert response.json()["accepted"] == 1
+
+
+def test_real_linux_auth_record_reaches_event_stream(client: TestClient):
+    event = parse_linux_auth_line(
+        "Aug 20 09:15:11 web-01 sshd[1208]: Failed password for invalid user admin from 203.0.113.42 port 49821 ssh2",
+        now=datetime(2026, 8, 20, 12, tzinfo=UTC),
+    )
+    response = client.post(
+        "/api/v1/ingest/events",
+        json={"events": [event]},
+        headers={"X-Ingestion-Key": "test-ingestion-key"},
+    )
+    assert response.status_code == 200
+    tokens = login(client)
+    stored = client.get("/api/v1/events?user_id=admin", headers=auth_headers(tokens)).json()
+    assert stored[0]["source"] == "linux-auth-log"
+    assert stored[0]["details"]["host"] == "web-01"
 
 
 def test_unusual_login_simulation_creates_explainable_alert(client: TestClient):
