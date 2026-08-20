@@ -15,10 +15,11 @@ from .database import get_db
 from .models import AnalystUser
 
 security = HTTPBearer()
+PASSWORD_ITERATIONS = 600_000
 
 
-def password_digest(password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 210_000).hex()
+def password_digest(password: str, salt: str, iterations: int = PASSWORD_ITERATIONS) -> str:
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations).hex()
 
 
 def hash_password(password: str) -> tuple[str, str]:
@@ -26,8 +27,13 @@ def hash_password(password: str) -> tuple[str, str]:
     return password_digest(password, salt), salt
 
 
-def verify_password(password: str, expected: str, salt: str) -> bool:
-    return hmac.compare_digest(password_digest(password, salt), expected)
+def verify_password(
+    password: str,
+    expected: str,
+    salt: str,
+    iterations: int = PASSWORD_ITERATIONS,
+) -> bool:
+    return hmac.compare_digest(password_digest(password, salt, iterations), expected)
 
 
 def create_token(subject: str, role: str, token_type: str, lifetime: timedelta, jti: str | None = None) -> str:
@@ -38,6 +44,8 @@ def create_token(subject: str, role: str, token_type: str, lifetime: timedelta, 
         "role": role,
         "type": token_type,
         "jti": jti or uuid.uuid4().hex,
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
         "iat": now,
         "exp": now + lifetime,
     }
@@ -61,6 +69,8 @@ def decode_token(token: str, expected_type: str) -> dict:
             token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token") from exc

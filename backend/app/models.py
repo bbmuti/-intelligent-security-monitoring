@@ -1,6 +1,17 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -12,6 +23,11 @@ def utc_now() -> datetime:
 
 class SecurityEvent(Base):
     __tablename__ = "security_events"
+    __table_args__ = (
+        UniqueConstraint("source", "source_event_id", name="uq_security_events_source_event_id"),
+        Index("ix_security_events_ip_timestamp", "ip_address", "timestamp"),
+        Index("ix_security_events_user_timestamp", "user_id", "timestamp"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
@@ -23,6 +39,7 @@ class SecurityEvent(Base):
     endpoint: Mapped[str] = mapped_column(String(255), default="/")
     role: Mapped[str] = mapped_column(String(40), default="user")
     source: Mapped[str] = mapped_column(String(80), default="api", index=True)
+    source_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)
     anomaly_score: Mapped[float] = mapped_column(Float, default=0.0)
@@ -59,6 +76,7 @@ class AnalystUser(Base):
     username: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(128))
     password_salt: Mapped[str] = mapped_column(String(64))
+    password_iterations: Mapped[int] = mapped_column(Integer, default=600_000)
     role: Mapped[str] = mapped_column(String(40), default="analyst")
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -69,6 +87,8 @@ class RefreshSession(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     jti: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    family_id: Mapped[str] = mapped_column(String(64), index=True)
+    parent_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("analyst_users.id", ondelete="CASCADE"), index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -12,6 +12,9 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   api:
     build: ./backend
@@ -23,8 +26,6 @@ services:
       INGESTION_API_KEY: ${INGESTION_API_KEY:-local-ingestion-key-change-me}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
-    ports:
-      - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -33,14 +34,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   web:
     build: ./frontend
     ports:
-      - "5173:80"
+      - "5173:8080"
     depends_on:
       api:
         condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
   postgres_data:

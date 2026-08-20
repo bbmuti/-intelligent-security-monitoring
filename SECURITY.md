@@ -18,6 +18,8 @@ Do not include real credentials, personal data, access tokens, or production log
 
 ## Deployment boundary
 
+The included Compose stack keeps PostgreSQL and FastAPI on an internal network and publishes only a non-root, read-only Nginx container. Browser refresh sessions use HttpOnly/SameSite cookies, double-submit CSRF protection, atomic token-family rotation, and replay-family revocation. These controls reduce risk but do not make the repository a managed internet service.
+
 Before any internet-facing deployment:
 
 1. Set `ENVIRONMENT=production`.
@@ -27,4 +29,4 @@ Before any internet-facing deployment:
 5. Use managed secret storage, backups, retention controls, monitoring, and a distributed rate limiter.
 6. Complete an independent threat model, dependency review, and penetration test.
 
-The current repository intentionally documents further limitations in the README rather than claiming production readiness.
+The repository includes a scoped [threat model](docs/THREAT_MODEL.md) and intentionally documents residual limitations in the README rather than claiming production readiness.

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     admin_password: str = "change-me-before-production"
     ingestion_api_key: str = "local-ingestion-key-change-me"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    jwt_issuer: str = "sentinelscope"
+    jwt_audience: str = "sentinelscope-api"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -28,9 +30,14 @@ class Settings(BaseSettings):
                 "local-development-secret-change-me",
                 "change-me-before-production",
                 "local-ingestion-key-change-me",
+                "replace-with-a-long-random-value",
+                "replace-with-a-separate-random-value",
             }
             values = {self.jwt_secret, self.admin_password, self.ingestion_api_key}
-            if insecure & values:
+            normalized = {value.strip().lower() for value in values}
+            if insecure & normalized or any(
+                marker in value for value in normalized for marker in ("change-me", "replace-with")
+            ):
                 raise RuntimeError("Production security secrets must be replaced")
             if len(self.jwt_secret) < 32 or len(self.admin_password) < 12 or len(self.ingestion_api_key) < 24:
                 raise RuntimeError("Production secrets do not meet the minimum length requirements")

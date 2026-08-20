@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import "./styles.css";
+import { AlertDrawer, InitialLoadState } from "./components.jsx";
 import { filterAlerts, filterEvents, isActiveAlert } from "./domain.js";
 
 const API = import.meta.env.VITE_API_URL || "";
@@ -25,6 +26,7 @@ const API = import.meta.env.VITE_API_URL || "";
 async function rawRequest(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
     ...options,
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...options.headers },
   });
   if (response.status === 204) return null;
@@ -35,6 +37,14 @@ async function rawRequest(path, options = {}) {
     throw error;
   }
   return body;
+}
+
+function csrfHeaders() {
+  const token = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith("sentinelscope_csrf="))
+    ?.split("=")[1];
+  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
 }
 
 function Login({ onLogin }) {
@@ -147,11 +157,11 @@ function AlertsView({ alerts, onSelect, onStatus }) {
   return <article className="panel page-panel">
     <div className="panel-head"><div><p className="eyebrow">ALERT MANAGEMENT</p><h2>Findings queue</h2></div><Filter size={18} /></div>
     <div className="filters">
-      <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">Active</option><option value="all">All statuses</option><option value="resolved">Resolved</option><option value="false_positive">False positive</option></select>
-      <select value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="all">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select>
+      <select aria-label="Alert status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">Active</option><option value="all">All statuses</option><option value="resolved">Resolved</option><option value="false_positive">False positive</option></select>
+      <select aria-label="Alert severity" value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="all">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select>
       <span>{filtered.length} findings</span>
     </div>
-    <div className="alert-list full-list">{filtered.map((alert) => <AlertRow key={alert.id} alert={alert} onSelect={onSelect} onStatus={onStatus} />)}</div>
+    <div className="alert-list full-list">{filtered.length === 0 && <div className="empty"><ShieldCheck size={32} /><strong>No matching alerts</strong><span>Change the filters or generate a controlled scenario.</span></div>}{filtered.map((alert) => <AlertRow key={alert.id} alert={alert} onSelect={onSelect} onStatus={onStatus} />)}</div>
   </article>;
 }
 
@@ -161,8 +171,8 @@ function EventsView({ events }) {
   const filtered = filterEvents(events, type, query);
   return <article className="panel page-panel">
     <div className="panel-head"><div><p className="eyebrow">SEARCHABLE TELEMETRY</p><h2>Event stream</h2></div><Terminal size={18} /></div>
-    <div className="filters"><label className="search-box"><Search size={15} /><input placeholder="User, IP or endpoint" value={query} onChange={(e) => setQuery(e.target.value)} /></label><select value={type} onChange={(e) => setType(e.target.value)}><option value="all">All event types</option><option value="login">Login</option><option value="api_access">API access</option><option value="authorization_failure">Authorization failure</option><option value="role_change">Role change</option></select></div>
-    <div className="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>User</th><th>Source IP</th><th>Outcome</th><th>Source</th><th>Risk</th></tr></thead><tbody>{filtered.map((event) => <tr key={event.id}><td>{new Date(event.timestamp).toLocaleString()}</td><td>{event.event_type.replaceAll('_',' ')}</td><td>{event.user_id}</td><td><code>{event.ip_address}</code></td><td><span className={`outcome ${event.outcome}`}>{event.outcome}</span></td><td>{event.source}</td><td><b>{event.risk_score}</b></td></tr>)}</tbody></table></div>
+    <div className="filters"><label className="search-box"><Search size={15} /><input aria-label="Search events" placeholder="User, IP or endpoint" value={query} onChange={(e) => setQuery(e.target.value)} /></label><select aria-label="Event type" value={type} onChange={(e) => setType(e.target.value)}><option value="all">All event types</option><option value="login">Login</option><option value="api_access">API access</option><option value="authorization_failure">Authorization failure</option><option value="role_change">Role change</option></select></div>
+    {filtered.length === 0 ? <div className="empty"><Terminal size={32} /><strong>No matching events</strong><span>Change the search or ingest telemetry.</span></div> : <div className="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>User</th><th>Source IP</th><th>Outcome</th><th>Source</th><th>Risk</th></tr></thead><tbody>{filtered.map((event) => <tr key={event.id}><td>{new Date(event.timestamp).toLocaleString()}</td><td>{event.event_type.replaceAll('_',' ')}</td><td>{event.user_id}</td><td><code>{event.ip_address}</code></td><td><span className={`outcome ${event.outcome}`}>{event.outcome}</span></td><td>{event.source}</td><td><b>{event.risk_score}</b></td></tr>)}</tbody></table></div>}
   </article>;
 }
 
@@ -181,12 +191,7 @@ function LabView({ runScenario, running, notice, detection }) {
 }
 
 function AuditView({ audits }) {
-  return <article className="panel page-panel"><div className="panel-head"><div><p className="eyebrow">ACCOUNTABILITY</p><h2>Audit trail</h2></div><ClipboardList size={18} /></div><div className="audit-list">{audits.map((item) => <div key={item.id}><span>{new Date(item.created_at).toLocaleString()}</span><strong>{item.action.replaceAll('_',' ')}</strong><p>{item.actor} · {item.target_type} #{item.target_id}</p></div>)}</div></article>;
-}
-
-function AlertDrawer({ alert, onClose, onStatus }) {
-  if (!alert) return null;
-  return <div className="drawer-backdrop" onClick={onClose}><aside className="alert-drawer" onClick={(event) => event.stopPropagation()}><button className="drawer-close" onClick={onClose}><X /></button><Severity value={alert.severity} /><h2>{alert.title}</h2><div className="risk-display"><span>Risk score</span><strong>{alert.risk_score}</strong></div><p>{alert.explanation}</p><h3>Evidence</h3><ul>{alert.evidence.map((item) => <li key={item}>{item}</li>)}</ul><h3>MITRE ATT&CK</h3><code>{alert.mitre_technique || "Behavioral anomaly"}</code><label>Status<select value={alert.status} onChange={(e) => onStatus(alert.id, e.target.value)}><option value="open">Open</option><option value="investigating">Investigating</option><option value="resolved">Resolved</option><option value="false_positive">False positive</option></select></label></aside></div>;
+  return <article className="panel page-panel"><div className="panel-head"><div><p className="eyebrow">ACCOUNTABILITY</p><h2>Audit trail</h2></div><ClipboardList size={18} /></div><div className="audit-list">{audits.length === 0 && <div className="empty"><ClipboardList size={32} /><strong>No audit records yet</strong><span>Authentication and triage actions appear here.</span></div>}{audits.map((item) => <div key={item.id}><span>{new Date(item.created_at).toLocaleString()}</span><strong>{item.action.replaceAll('_',' ')}</strong><p>{item.actor} · {item.target_type} #{item.target_id}</p></div>)}</div></article>;
 }
 
 function Dashboard({ request, onLogout }) {
@@ -208,7 +213,7 @@ function Dashboard({ request, onLogout }) {
         request("/api/v1/events?limit=200"), request("/api/v1/audit-logs?limit=100"),
         request("/api/v1/detection/health"),
       ]);
-      setSummary(summaryData); setAlerts(alertsData); setEvents(eventsData); setAudits(auditData); setDetection(detectionData); setLastUpdated(new Date());
+      setSummary(summaryData); setAlerts(alertsData); setEvents(eventsData); setAudits(auditData); setDetection(detectionData); setLastUpdated(new Date()); setNotice("");
     } catch (error) { if (!quiet) setNotice(error.message); }
   }, [request]);
 
@@ -230,22 +235,25 @@ function Dashboard({ request, onLogout }) {
     }
   }
 
-  if (!summary) return <div className="loading"><Radar className="spin" /> Loading security telemetry…</div>;
+  if (!summary) return <InitialLoadState error={notice} onRetry={() => { setNotice(""); refresh(); }} />;
   const nav = [
     ["overview", Activity, "Overview"], ["alerts", AlertTriangle, "Alerts"],
     ["events", Terminal, "Event stream"], ["lab", Eye, "Detection lab"],
     ["audit", ClipboardList, "Audit trail"],
   ];
-  return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark small"><Radar size={20} /></div><div><strong>SentinelScope</strong><span>Security operations</span></div></div><nav>{nav.map(([id,Icon,label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "alerts" && summary.open_alerts > 0 && <b>{summary.open_alerts}</b>}<ChevronRight className="nav-arrow" size={14} /></button>)}</nav><div className="system-state"><span><i /> Detection online</span><small>{detection?.model_version} · auto-refresh 10s</small></div></aside><main className="dashboard"><header><div><p className="eyebrow">SECURITY OPERATIONS CENTER</p><h1>{nav.find(([id]) => id === view)?.[2]}</h1><p>{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : "Connecting to telemetry…"}</p></div><div className="header-actions"><button className="ghost" onClick={() => refresh()}><RefreshCw size={15} /> Refresh</button><button className="ghost" onClick={onLogout}>Sign out</button></div></header>{notice && view !== "lab" && <div className="global-notice" role="alert">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}{view === "overview" && <Overview summary={summary} alerts={alerts} events={events} onSelect={setSelectedAlert} onStatus={updateStatus} />}{view === "alerts" && <AlertsView alerts={alerts} onSelect={setSelectedAlert} onStatus={updateStatus} />}{view === "events" && <EventsView events={events} />}{view === "lab" && <LabView runScenario={runScenario} running={running} notice={notice} detection={detection} />}{view === "audit" && <AuditView audits={audits} />}</main><AlertDrawer alert={selectedAlert} onClose={() => setSelectedAlert(null)} onStatus={updateStatus} /></div>;
+  return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark small"><Radar size={20} /></div><div><strong>SentinelScope</strong><span>Security operations</span></div></div><nav>{nav.map(([id,Icon,label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "alerts" && summary.open_alerts > 0 && <b>{summary.open_alerts}</b>}<ChevronRight className="nav-arrow" size={14} /></button>)}</nav><div className="system-state"><span><i /> Detection online</span><small>{detection?.model_version} · auto-refresh 10s</small></div></aside><main className="dashboard"><header><div><p className="eyebrow">SECURITY OPERATIONS CENTER</p><h1>{nav.find(([id]) => id === view)?.[2]}</h1><p>{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : "Connecting to telemetry…"}</p></div><div className="header-actions"><button className="ghost" onClick={() => refresh()}><RefreshCw size={15} /> Refresh</button><button className="ghost" onClick={onLogout}>Sign out</button></div></header>{notice && view !== "lab" && <div className="global-notice" role="alert">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}{view === "overview" && <Overview summary={summary} alerts={alerts} events={events} onSelect={setSelectedAlert} onStatus={updateStatus} />}{view === "alerts" && <AlertsView alerts={alerts} onSelect={setSelectedAlert} onStatus={updateStatus} />}{view === "events" && <EventsView events={events} />}{view === "lab" && <LabView runScenario={runScenario} running={running} notice={notice} detection={detection} />}{view === "audit" && <AuditView audits={audits} />}</main><AlertDrawer alert={selectedAlert} onClose={() => setSelectedAlert(null)} onStatus={updateStatus} severityBadge={<Severity value={selectedAlert?.severity} />} /></div>;
 }
 
 function App() {
-  const [auth, setAuth] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem("sentinel_auth")) || null; } catch { return null; }
-  });
+  const [auth, setAuth] = useState(undefined);
   const authRef = useRef(auth);
   const refreshPromise = useRef(null);
-  const saveAuth = useCallback((value) => { authRef.current = value; if (value) sessionStorage.setItem("sentinel_auth", JSON.stringify(value)); else sessionStorage.removeItem("sentinel_auth"); setAuth(value); }, []);
+  const saveAuth = useCallback((value) => { authRef.current = value; setAuth(value); }, []);
+  useEffect(() => {
+    rawRequest("/api/v1/auth/refresh", { method: "POST", headers: csrfHeaders() })
+      .then(saveAuth)
+      .catch(() => saveAuth(null));
+  }, [saveAuth]);
   const request = useCallback(async (path, options = {}) => {
     const requestAuth = authRef.current;
     if (!requestAuth) throw new Error("Authentication required");
@@ -260,7 +268,7 @@ function App() {
         if (!refreshPromise.current) {
           refreshPromise.current = rawRequest("/api/v1/auth/refresh", {
             method: "POST",
-            body: JSON.stringify({ refresh_token: latestAuth.refresh_token }),
+            headers: csrfHeaders(),
           }).then((renewed) => { saveAuth(renewed); return renewed; })
             .finally(() => { refreshPromise.current = null; });
         }
@@ -269,7 +277,8 @@ function App() {
       } catch { saveAuth(null); throw new Error("Your session expired. Please sign in again."); }
     }
   }, [saveAuth]);
-  async function logout() { try { if (auth) await rawRequest("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refresh_token: auth.refresh_token }) }); } finally { saveAuth(null); } }
+  async function logout() { try { if (auth) await rawRequest("/api/v1/auth/logout", { method: "POST", headers: csrfHeaders() }); } finally { saveAuth(null); } }
+  if (auth === undefined) return <InitialLoadState error="" onRetry={() => {}} />;
   return auth ? <Dashboard request={request} onLogout={logout} /> : <Login onLogin={saveAuth} />;
 }
 

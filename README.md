@@ -24,7 +24,8 @@ Every stored event receives an anomaly score and combined risk score. Findings a
 ## Current capabilities
 
 - Service-authenticated batch ingestion for JSON/JSONL, Linux OpenSSH, and Windows Security Event Log sources
-- Analyst authentication with short-lived access tokens and rotating, revocable refresh sessions
+- Analyst authentication with in-memory access tokens and HttpOnly, CSRF-protected, single-use refresh-token families
+- Idempotent collector ingestion using stable source event identifiers and a database uniqueness constraint
 - Brute-force, unusual-hour login, repeated authorization failure, privilege-escalation, rapid-country-change, and behavioral-anomaly detection
 - A personal behavioral baseline after 30 successful events, with a deterministic global fallback before enough history exists
 - Explainable 0–100 risk scoring and MITRE ATT&CK context
@@ -32,14 +33,14 @@ Every stored event receives an anomaly score and combined risk score. Findings a
 - Searchable event stream, filtered alert queue, evidence drawer, detection lab, and audit trail
 - Automatic dashboard refresh every 10 seconds
 - PostgreSQL deployment with Alembic migrations; SQLite for lightweight local development and tests
-- Docker Compose, health/readiness probes, CI, Bandit, Ruff, Dependabot, and coverage enforcement
+- Hardened non-root/read-only containers, health/readiness probes, CI, dependency audits, Bandit, Ruff, Dependabot, and coverage enforcement
 - Reproducible BETH real-telemetry benchmark with versioned results, dataset hashes, and explicit scope limitations
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    A["Windows / Linux / JSONL collectors"] -->|"X-Ingestion-Key"| B["FastAPI ingestion"]
+    A["Windows / Linux / JSONL collectors"] -->|"X-Ingestion-Key through Nginx"| B["FastAPI ingestion"]
     B --> C["Validation + 10-minute correlation"]
     C --> D["Detection rules"]
     C --> E["Isolation Forest"]
@@ -60,7 +61,7 @@ flowchart TD
 ## Detection pipeline
 
 1. Pydantic validates event type, outcome, timestamp, IP address, country code, batch size, and the 16 KB details limit.
-2. The API loads only events inside the event's preceding 10-minute window; future timestamps cannot leak into its decision.
+2. The API deduplicates stable collector identifiers and loads user/IP-scoped events inside the event's preceding 10-minute window; future timestamps cannot leak into its decision.
 3. Detection rules calculate known-pattern risk and attach concrete evidence.
 4. Isolation Forest scores six behavioral features: cyclic hour, outcome, role, sensitive action, and same-IP activity volume.
 5. If a user has at least 30 earlier successful events, a personal baseline is used; otherwise the cached deterministic fallback model is used.
@@ -96,11 +97,10 @@ docker compose up --build
 Open:
 
 - Dashboard: <http://localhost:5173>
-- OpenAPI documentation: <http://localhost:8000/docs>
-- API health: <http://localhost:8000/health>
-- Dependency readiness: <http://localhost:8000/ready>
+- API health: <http://localhost:5173/health>
+- Dependency readiness: <http://localhost:5173/ready>
 
-Docker runs the Alembic migration before starting the API. The first startup creates the configured analyst account.
+Docker runs the Alembic migration before starting the API. The first startup creates the configured analyst account. Only the hardened Nginx service is published; the API and PostgreSQL stay on the internal Compose network.
 
 ## Local development
 
@@ -157,6 +157,8 @@ Stream a live Debian/Ubuntu authentication log to a running API:
 sudo -E python -m scripts.collect_linux_auth --follow --file /var/log/auth.log
 ```
 
+When using Docker Compose, add `--endpoint http://localhost:5173/api/v1/ingest/events` because the API is intentionally not exposed directly.
+
 ### Windows Security Event Log
 
 Run PowerShell as an account allowed to read the Security log. Event IDs `4624` and `4625` are normalized as successful and failed login events:
@@ -166,7 +168,7 @@ $env:SENTINELSCOPE_INGESTION_KEY="your-ingestion-key"
 powershell -ExecutionPolicy Bypass -File collectors/windows_security_eventlog.ps1 -DryRun
 ```
 
-Remove `-DryRun` to send events to the API. Use `-Endpoint` and `-LookbackMinutes` to override the defaults. The script is a one-shot collector; avoid overlapping lookback windows unless duplicate ingestion is acceptable.
+Remove `-DryRun` to send events to the API. Use `-Endpoint`, `-LookbackMinutes`, and `-StateFile` to override the defaults. The collector persists the last Windows record ID after a successful send, while the API's `(source, source_event_id)` uniqueness constraint prevents replayed records from creating duplicate events or alerts. Missing Windows source IPs are represented as the unspecified address `0.0.0.0` and are excluded from same-IP attack correlation.
 
 Example event:
 
@@ -181,6 +183,7 @@ Example event:
   "endpoint": "/auth/login",
   "role": "user",
   "source": "identity-service",
+  "source_event_id": "identity-service-01HZZ8J4Y7",
   "details": {"provider": "local"}
 }
 ```
@@ -192,8 +195,8 @@ Supported event types are `login`, `api_access`, `authorization_failure`, and `r
 | Method | Route | Access | Purpose |
 |---|---|---|---|
 | `GET` | `/health`, `/ready` | Public | Liveness and dependency checks |
-| `POST` | `/api/v1/auth/login` | Public, rate-limited | Create an access/refresh token pair |
-| `POST` | `/api/v1/auth/refresh`, `/logout` | Refresh token | Rotate or revoke a session |
+| `POST` | `/api/v1/auth/login` | Public, rate-limited | Return an access token and set refresh/CSRF cookies |
+| `POST` | `/api/v1/auth/refresh`, `/logout` | HttpOnly refresh cookie + CSRF header | Rotate or revoke a session family |
 | `POST` | `/api/v1/ingest/events` | Ingestion key | Ingest a validated event batch |
 | `GET/POST` | `/api/v1/events` | Analyst | Search or manually create events |
 | `GET/PATCH` | `/api/v1/alerts` | Analyst | Filter, inspect, and triage alerts |
@@ -202,7 +205,18 @@ Supported event types are `login`, `api_access`, `authorization_failure`, and `r
 | `GET` | `/api/v1/audit-logs` | Analyst | Security-relevant action history |
 | `POST` | `/api/v1/simulations/{scenario}` | Analyst | Generate a safe local demo scenario |
 
-Interactive request/response schemas are available through Swagger UI at `/docs`.
+During local backend development, interactive request/response schemas are available through Swagger UI at <http://localhost:8000/docs>. The hardened Compose proxy does not publish the documentation or API port directly.
+
+## Retention maintenance
+
+Preview the default 90-day event / 365-day audit retention policy, then apply it from `backend/`:
+
+```bash
+python -m scripts.prune_data --dry-run
+python -m scripts.prune_data
+```
+
+Expired refresh sessions are removed in the same transaction. Production scheduling, backups, and legal retention approval remain deployment responsibilities.
 
 ## Safe demo scenarios
 
@@ -212,18 +226,18 @@ The Detection Lab can generate `normal`, `brute_force`, `privilege_escalation`, 
 
 | Control | Implementation |
 |---|---|
-| Password storage | Random per-user salt and PBKDF2-HMAC-SHA256 |
-| Session handling | 20-minute access JWT, rotating refresh JWT, server-side revocation record |
-| Login abuse | Sliding five-attempt/five-minute limiter per client and username |
+| Password storage | Random per-user salt and PBKDF2-HMAC-SHA256 at 600,000 iterations; legacy hashes upgrade on login |
+| Session handling | 20-minute access JWT in browser memory; HttpOnly/SameSite refresh cookie; atomic rotation, CSRF protection and family replay revocation |
+| Login abuse | Sliding limits per client IP and per client/account pair |
 | Service ingestion | Constant-time API-key comparison and separate trust boundary |
 | Input safety | Typed enums, IPv4/IPv6 parsing, UTC normalization, bounded batch and details sizes |
-| Data integrity | Foreign keys, unique event-alert relationship, status/severity constraints, migrations |
+| Data integrity | Foreign keys, idempotent source event IDs, scoped correlation indexes, unique event-alert relationship, constraints and migrations |
 | Accountability | Login, token, simulation, alert-creation, and triage audit records |
 | Deployment guard | Startup refuses known placeholder secrets when `ENVIRONMENT=production` |
-| Web hardening | Explicit CORS origins and Nginx security headers |
-| Supply chain | Dependabot plus pinned direct Python and npm dependencies |
+| Web hardening | Explicit CORS origins, CSP/security headers and a non-root Nginx boundary |
+| Supply chain | Exact direct dependencies, npm lockfile, SHA-pinned Actions, Dependabot, `pip-audit` and `npm audit` |
 
-See [SECURITY.md](SECURITY.md) for reporting guidance and the current security boundary.
+See [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md) for reporting guidance, assets, trust boundaries and residual risk.
 
 ## Testing and quality gates
 
@@ -232,26 +246,30 @@ cd backend
 python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=80
 ruff check app tests scripts migrations
 bandit -q -r app scripts ../examples
+pip-audit -r requirements.txt -r requirements-dev.txt
 python -m scripts.evaluate_model
 
 cd ../frontend
 npm test
 npm run build
+npm run test:e2e       # requires Playwright Chromium
 ```
 
-Current local verification: **39 backend tests**, **3 frontend domain tests**, and **93.02% backend branch coverage**. CI independently validates a clean Alembic migration, linting, security scanning, tests, the model smoke evaluation, and the production frontend build.
+Current local verification: **62 backend tests**, **7 frontend domain/component tests**, and **93.21% backend branch coverage**. The CI quality gates cover branch coverage, a browser analyst flow, a clean Alembic migration, a real PostgreSQL API smoke test, PowerShell collector syntax, Python/npm vulnerability audits (including development tooling), linting, Bandit, container builds, the deterministic model smoke evaluation, and the production frontend build.
 
 ### Model evaluation scope
 
 `backend/artifacts/model-evaluation.json` records a deterministic 180-sample synthetic smoke evaluation. Its current precision, recall, and F1 are `1.00` because the samples intentionally represent the rules' known regression boundaries. This is useful for catching behavioral regressions, but it is **not a production accuracy claim** and must not be compared with a real-world intrusion dataset benchmark.
 
-For real telemetry, `backend/scripts/benchmark_beth.py` provides a reproducible external BETH evaluation with deterministic sampling, input hashes, class counts, threshold methodology, and imbalance-aware metrics. On the version 3 BETH split sampled at 100,000 records per stage, the frozen test result is **97.16% precision, 91.45% recall, and 94.22% F1**. The benign test false-positive rate is **13.97%**, so this remains an algorithm-family research result rather than a production-readiness claim. It validates Isolation Forest on process telemetry; it does **not** claim end-to-end accuracy for SentinelScope's authentication schema. See the [methodology](docs/BENCHMARKING.md) and [versioned report](backend/artifacts/beth-benchmark.json).
+For real telemetry, `backend/scripts/benchmark_beth.py` provides a reproducible external BETH evaluation with deterministic sampling, three model seeds, a 1,000-tree score ensemble, bootstrap confidence intervals, a random-score baseline, input hashes, environment versions, class counts, threshold methodology, and imbalance-aware metrics. On the version 3 BETH split sampled at 100,000 records per stage, the frozen ensemble result is **97.29% precision, 91.45% recall, and 94.28% F1**. The benign test false-positive rate is **13.27%** (95% bootstrap interval: **12.76–13.84%**), so this remains an algorithm-family research result rather than a production-readiness claim. Individual-seed threshold behavior is included in the artifact rather than hidden. It validates Isolation Forest on process telemetry; it does **not** claim end-to-end accuracy for SentinelScope's authentication schema. See the [methodology](docs/BENCHMARKING.md) and [versioned report](backend/artifacts/beth-benchmark.json).
 
 ## Demo and CV material
 
 - [90-second demonstration script](docs/DEMO.md)
 - [CV bullets and interview preparation](docs/CV_PROJECT_DESCRIPTION.md)
 - [Public-release checklist](docs/PUBLIC_RELEASE_CHECKLIST.md)
+- [Threat model and trust boundaries](docs/THREAT_MODEL.md)
+- [Direct dependency license review](docs/DEPENDENCY_LICENSES.md)
 
 ## Repository structure
 
@@ -274,13 +292,13 @@ For real telemetry, `backend/scripts/benchmark_beth.py` provides a reproducible 
 ## Honest limitations
 
 - The fallback model is trained on deterministic synthetic normal behavior until enough per-user history exists.
-- The external BETH harness evaluates process telemetry, not the complete authentication/API detection pipeline; its 13.97% benign test false-positive rate requires improvement before operational use.
-- Personal Isolation Forest models are trained on demand and are not yet persisted or monitored for drift.
+- The external BETH harness evaluates process telemetry, not the complete authentication/API detection pipeline; its 13.27% benign test false-positive rate and individual-seed threshold instability require improvement before operational use.
+- Personal Isolation Forest models use a bounded in-memory cache but are not yet persisted, versioned in a model registry, or monitored for drift.
 - Rapid country change is correlation-based; it does not calculate physical travel feasibility or use GeoIP lookup.
 - The in-memory login limiter is suitable for this single-process MVP, not a horizontally scaled deployment.
 - Dashboard updates use 10-second polling rather than WebSockets or a streaming broker.
 - There is one seeded admin account and no analyst-management UI, MFA, SSO, tenant isolation, notification channel, or case-management workflow.
-- Browser sessions use `sessionStorage`; a production design should prefer hardened `HttpOnly`, `Secure`, and appropriately scoped cookies.
+- Access JWTs remain valid until their short expiry after logout; a production deployment may require centralized access-token revocation.
 - Production deployment still requires TLS termination, managed secrets, backup/retention policies, centralized observability, and an external security review.
 
 ## Roadmap

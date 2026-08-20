@@ -13,13 +13,8 @@ class TokenRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=1, max_length=4096)
 
 
 class EventCreate(BaseModel):
@@ -31,6 +26,7 @@ class EventCreate(BaseModel):
     endpoint: str = Field(default="/", min_length=1, max_length=255)
     role: str = Field(default="user", min_length=1, max_length=40)
     source: str = Field(default="api", min_length=1, max_length=80)
+    source_event_id: str | None = Field(default=None, min_length=1, max_length=255)
     timestamp: datetime | None = None
     details: dict[str, Any] = Field(default_factory=dict)
 
@@ -98,6 +94,7 @@ class BatchIngestRequest(BaseModel):
 
 class BatchIngestResponse(BaseModel):
     accepted: int
+    duplicates: int
     alerts_created: int
     event_ids: list[int]
 

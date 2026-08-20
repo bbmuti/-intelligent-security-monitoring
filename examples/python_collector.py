@@ -1,6 +1,7 @@
 """Send JSONL security events to SentinelScope without third-party packages."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,12 @@ def load_events(path: Path) -> list[dict]:
         if not line.strip():
             continue
         try:
-            events.append(json.loads(line))
+            event = json.loads(line)
+            if "source_event_id" not in event:
+                canonical = json.dumps(event, sort_keys=True, separators=(",", ":"))
+                digest = hashlib.sha256(f"{path.name}:{line_number}:{canonical}".encode()).hexdigest()
+                event["source_event_id"] = f"jsonl-{digest}"
+            events.append(event)
         except json.JSONDecodeError as exc:
             raise ValueError(f"Invalid JSON on line {line_number}") from exc
     if not events:

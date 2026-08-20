@@ -8,8 +8,9 @@ Python, FastAPI, React, PostgreSQL, SQLAlchemy, scikit-learn, Docker, GitHub Act
 
 - Windows Security Event Log, Linux OpenSSH ve JSON/JSONL kaynaklarından güvenlik olaylarını alan tam kapsamlı bir izleme platformu geliştirdim.
 - Kural tabanlı tespitleri Isolation Forest davranış analiziyle birleştirerek açıklanabilir 0–100 risk puanı, MITRE ATT&CK eşleştirmesi ve kanıta dayalı alarm üretimi sağladım.
-- Döndürülebilir refresh token, rate limiting, servis kimlik doğrulaması, audit log, Alembic migrasyonları ve PostgreSQL desteği uyguladım.
-- Gerçek BETH telemetrisinde 100.000 kayıtlı test üzerinde %94,22 F1 elde eden tekrarlanabilir Isolation Forest benchmarkı; 39 backend testi, %80 coverage kalite kapısı, Ruff, Bandit, Dependabot ve otomatik frontend build içeren CI/CD süreci kurdum.
+- HttpOnly cookie, CSRF koruması, atomik refresh-token ailesi rotasyonu ve replay iptali; rate limiting, idempotent veri alımı, audit log, Alembic ve PostgreSQL desteği uyguladım.
+- Gerçek BETH process telemetrisinde üç seed’li 1.000 ağaçlı ensemble ile 100.000 kayıt üzerinde %94,28 F1 ölçen; güven aralığı, random baseline ve veri hash’leri içeren tekrarlanabilir araştırma benchmarkı geliştirdim.
+- Backend/frontend testleri, branch coverage kapısı, PostgreSQL smoke testi, Python/npm güvenlik denetimi, Windows collector kontrolü ve container build içeren GitHub Actions süreci kurdum.
 
 ## English CV version
 
@@ -19,9 +20,9 @@ Python, FastAPI, React, PostgreSQL, SQLAlchemy, scikit-learn, Docker, GitHub Act
 
 - Built a full-stack monitoring platform that ingests security telemetry from Windows Security Event Log, Linux OpenSSH, and JSON/JSONL sources.
 - Combined deterministic detections with Isolation Forest behavior scoring to generate explainable 0–100 risk scores, evidence, and MITRE ATT&CK context.
-- Implemented rotating refresh sessions, rate limiting, service authentication, audit logging, Alembic migrations, and PostgreSQL support.
-- Established CI quality gates covering 39 backend tests, 93% branch coverage, Ruff, Bandit, database migrations, and the production frontend build.
-- Added a reproducible external BETH benchmark with deterministic sampling, dataset hashes, and a 0.9422 F1 score on a 100,000-record test sample.
+- Implemented HttpOnly cookie sessions with CSRF protection, atomic refresh-token family rotation and replay revocation, rate limiting, idempotent ingestion, audit logging, Alembic, and PostgreSQL.
+- Established CI gates for backend/frontend tests, branch coverage, PostgreSQL smoke testing, Python/npm audits, Windows collector validation, and container builds.
+- Built a reproducible external BETH process-telemetry benchmark using a three-seed 1,000-tree ensemble, bootstrap intervals, a random baseline, dataset hashes, and a 0.9428 F1 score on a 100,000-record test sample.
 
 ## Interview explanation
 

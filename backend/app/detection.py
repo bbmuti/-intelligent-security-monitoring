@@ -1,6 +1,9 @@
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from ipaddress import IPv4Address, IPv6Address
 from math import cos, pi, sin
+from threading import Lock
 from typing import Protocol
 
 import numpy as np
@@ -9,6 +12,7 @@ from sklearn.ensemble import IsolationForest
 MODEL_VERSION = "iforest-v2"
 ALERT_THRESHOLD = 50
 MINIMUM_PERSONAL_BASELINE = 30
+UNATTRIBUTABLE_IPS = {str(IPv4Address(0)), str(IPv6Address(0))}
 
 
 class EventLike(Protocol):
@@ -47,12 +51,29 @@ class BehaviorModel:
     def __init__(self, baseline_events: list[EventLike] | None = None) -> None:
         self.model = IsolationForest(n_estimators=160, contamination=0.06, random_state=42)
         if baseline_events and len(baseline_events) >= MINIMUM_PERSONAL_BASELINE:
-            baseline = np.array([self.features(item, []) for item in baseline_events])
+            baseline = self._personal_baseline(baseline_events)
             self.baseline_kind = "personal"
         else:
             baseline = self._fallback_baseline()
             self.baseline_kind = "global-fallback"
         self.model.fit(baseline)
+
+    @classmethod
+    def _personal_baseline(cls, events: list[EventLike]) -> np.ndarray:
+        ordered = sorted(events, key=lambda item: item.timestamp)
+        rows: list[list[float]] = []
+        history: list[EventLike] = []
+        for event in ordered:
+            timestamp = event.timestamp if event.timestamp.tzinfo else event.timestamp.replace(tzinfo=UTC)
+            window_start = timestamp - timedelta(minutes=10)
+            recent = [
+                item
+                for item in history
+                if (item.timestamp if item.timestamp.tzinfo else item.timestamp.replace(tzinfo=UTC)) >= window_start
+            ]
+            rows.append(cls.features(event, recent))
+            history.append(event)
+        return np.array(rows)
 
     @staticmethod
     def _fallback_baseline() -> np.ndarray:
@@ -74,7 +95,11 @@ class BehaviorModel:
         timestamp = event.timestamp
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=UTC)
-        same_ip = sum(1 for item in recent_events if item.ip_address == event.ip_address)
+        same_ip = (
+            sum(1 for item in recent_events if item.ip_address == event.ip_address)
+            if event.ip_address not in UNATTRIBUTABLE_IPS
+            else 0
+        )
         angle = 2 * pi * timestamp.hour / 24
         return [
             sin(angle),
@@ -100,7 +125,11 @@ class BehaviorModel:
             reasons.append("the event outcome was unsuccessful or denied")
         if event.event_type in {"authorization_failure", "role_change"}:
             reasons.append("the event involved a sensitive authorization action")
-        same_ip = sum(1 for item in recent_events if item.ip_address == event.ip_address)
+        same_ip = (
+            sum(1 for item in recent_events if item.ip_address == event.ip_address)
+            if event.ip_address not in UNATTRIBUTABLE_IPS
+            else 0
+        )
         if same_ip >= 5:
             reasons.append(f"{same_ip + 1} events originated from the same IP in ten minutes")
         return reasons
@@ -118,6 +147,35 @@ class DetectionEngine:
 
     def __init__(self) -> None:
         self.fallback_model = BehaviorModel()
+        self._model_cache: OrderedDict[tuple, BehaviorModel] = OrderedDict()
+        self._cache_lock = Lock()
+
+    def _personal_model(self, baseline_events: list[EventLike]) -> BehaviorModel:
+        fingerprint = hash(
+            tuple(
+                (
+                    item.timestamp.isoformat(),
+                    item.ip_address,
+                    item.event_type,
+                    item.role,
+                    item.country,
+                )
+                for item in baseline_events
+            )
+        )
+        key = (baseline_events[0].user_id, len(baseline_events), fingerprint)
+        with self._cache_lock:
+            cached = self._model_cache.get(key)
+            if cached:
+                self._model_cache.move_to_end(key)
+                return cached
+        model = BehaviorModel(baseline_events)
+        with self._cache_lock:
+            self._model_cache[key] = model
+            self._model_cache.move_to_end(key)
+            while len(self._model_cache) > 128:
+                self._model_cache.popitem(last=False)
+        return model
 
     def analyze(
         self,
@@ -134,7 +192,8 @@ class DetectionEngine:
         failed_logins = sum(
             1
             for item in recent_events
-            if item.ip_address == event.ip_address
+            if event.ip_address not in UNATTRIBUTABLE_IPS
+            and item.ip_address == event.ip_address
             and item.event_type == "login"
             and item.outcome == "failure"
         )
@@ -191,7 +250,7 @@ class DetectionEngine:
             )
 
         model = (
-            BehaviorModel(baseline_events)
+            self._personal_model(baseline_events)
             if baseline_events and len(baseline_events) >= MINIMUM_PERSONAL_BASELINE
             else self.fallback_model
         )

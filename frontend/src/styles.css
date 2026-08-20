@@ -31,6 +31,7 @@ input:focus { border-color: #4ed8c7; box-shadow: 0 0 0 3px #4ed8c715; }
 .signal-card span,.signal-card small{display:block;color:#718ba2;font-size:11px}.signal-card strong{display:block;color:#e9f8f6;font:700 22px 'Space Mono';margin:6px 0}.signal-card small{color:#4ed8c7}
 @keyframes rotate { to { transform:rotate(360deg); } } @keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite}
 .loading { min-height:100vh;display:flex;align-items:center;justify-content:center;gap:12px;color:#8ba0b5; }
+.load-error{padding:24px;text-align:left}.load-error div{display:grid;gap:4px;max-width:420px}.load-error strong{color:#ffbdc4}.load-error span{font-size:12px;line-height:1.5}
 .global-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-10px 0 18px;padding:11px 13px;color:#ffbdc4;background:#2b1720;border:1px solid #5d2935;border-radius:9px;font-size:12px}.global-notice button{display:grid;place-items:center;color:inherit;background:transparent;border:0}
 .app-shell { min-height:100vh; display:grid; grid-template-columns:240px 1fr; }
 .sidebar { position:sticky;top:0;height:100vh;padding:24px 18px;border-right:1px solid #142536;background:#07101bd9;backdrop-filter:blur(18px);display:flex;flex-direction:column; }

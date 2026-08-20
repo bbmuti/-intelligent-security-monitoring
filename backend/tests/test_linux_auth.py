@@ -11,6 +11,7 @@ def test_parses_successful_public_key_login():
     assert event["user_id"] == "beren"
     assert event["outcome"] == "success"
     assert event["source"] == "linux-auth-log"
+    assert len(event["source_event_id"]) == 64
     assert event["details"]["authentication_method"] == "publickey"
 
 
@@ -42,3 +43,10 @@ def test_small_clock_skew_does_not_move_record_to_previous_year():
         now=datetime(2026, 8, 20, 12, tzinfo=UTC),
     )
     assert event["timestamp"].startswith("2026-08-20")
+
+
+def test_source_event_id_is_stable_for_replayed_line():
+    line = "Aug 20 09:14:07 web-01 sshd[1201]: Accepted publickey for beren from 10.0.0.24 port 51822 ssh2"
+    first = parse_linux_auth_line(line, now=datetime(2026, 8, 20, 12, tzinfo=UTC))
+    second = parse_linux_auth_line(line, now=datetime(2026, 8, 20, 13, tzinfo=UTC))
+    assert first["source_event_id"] == second["source_event_id"]

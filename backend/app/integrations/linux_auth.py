@@ -2,6 +2,7 @@
 
 import re
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 
 SYSLOG_PREFIX = re.compile(
     r"^(?P<month>[A-Z][a-z]{2})\s+(?P<day>\d{1,2})\s+(?P<clock>\d{2}:\d{2}:\d{2})\s+"
@@ -25,7 +26,8 @@ def _timestamp(month: str, day: str, clock: str, now: datetime) -> datetime:
 def parse_linux_auth_line(line: str, now: datetime | None = None) -> dict | None:
     """Return a normalized event for an OpenSSH login record, otherwise ``None``."""
 
-    prefix = SYSLOG_PREFIX.match(line.strip())
+    normalized_line = line.strip()
+    prefix = SYSLOG_PREFIX.match(normalized_line)
     if not prefix:
         return None
     auth = SSH_AUTH.match(prefix.group("message"))
@@ -46,6 +48,7 @@ def parse_linux_auth_line(line: str, now: datetime | None = None) -> dict | None
         "endpoint": "/ssh",
         "role": "user",
         "source": "linux-auth-log",
+        "source_event_id": sha256(normalized_line.encode()).hexdigest(),
         "details": {
             "host": prefix.group("host"),
             "authentication_method": auth.group("method"),

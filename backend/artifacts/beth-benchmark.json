@@ -1,7 +1,25 @@
 {
   "benchmark": "BETH real cybersecurity process events",
   "algorithm": "IsolationForest",
+  "algorithm_parameters": {
+    "estimators": 1000,
+    "contamination": "auto",
+    "model_seeds": [
+      42,
+      52,
+      62
+    ]
+  },
   "evaluation_scope": "Algorithm-family validation; not an end-to-end authentication detector benchmark.",
+  "run_metadata": {
+    "generated_at": "2026-08-20T13:27:10.984830+00:00",
+    "source_revision": "uncommitted-working-tree",
+    "python": "3.12.13",
+    "packages": {
+      "numpy": "2.3.2",
+      "scikit-learn": "1.7.1"
+    }
+  },
   "dataset": {
     "paper": "BETH Dataset: Real Cybersecurity Data for Unsupervised Anomaly Detection Research",
     "license": "CC0-1.0",
@@ -35,33 +53,157 @@
     "validation_attack_rows": 0,
     "eligible_test_rows": 188967,
     "sampled_test_rows": 100000,
-    "test_attack_rows": 83911
+    "test_attack_rows": 83911,
+    "test_benign_rows": 16089
   },
   "threshold": {
     "method": "percentile of the separate benign validation anomaly scores",
     "percentile": 95.0,
-    "value": 0.118519
+    "value": 0.117141,
+    "model": "mean anomaly score across configured model seeds"
   },
-  "validation_false_positive_rate": 0.0503,
+  "validation_false_positive_rate": 0.05,
   "metrics": {
-    "accuracy": 0.9058,
-    "precision": 0.9716,
+    "accuracy": 0.9069,
+    "precision": 0.9729,
     "recall": 0.9145,
-    "f1": 0.9422,
-    "roc_auc": 0.8449,
-    "average_precision": 0.9382,
-    "false_positive_rate": 0.1397,
+    "f1": 0.9428,
+    "roc_auc": 0.8412,
+    "average_precision": 0.9187,
+    "false_positive_rate": 0.1327,
     "confusion_matrix": {
-      "tn": 13842,
-      "fp": 2247,
+      "tn": 13954,
+      "fp": 2135,
       "fn": 7176,
       "tp": 76735
+    }
+  },
+  "bootstrap_95_percent_intervals": {
+    "precision": [
+      0.9717,
+      0.974
+    ],
+    "recall": [
+      0.9125,
+      0.9162
+    ],
+    "f1": [
+      0.9416,
+      0.9438
+    ],
+    "fpr": [
+      0.1276,
+      0.1384
+    ]
+  },
+  "repeated_seed_runs": [
+    {
+      "seed": 42,
+      "threshold": 0.117657,
+      "validation_false_positive_rate": 0.05,
+      "metrics": {
+        "accuracy": 0.1396,
+        "precision": 0.0019,
+        "recall": 0.0,
+        "f1": 0.0001,
+        "roc_auc": 0.8406,
+        "average_precision": 0.9324,
+        "false_positive_rate": 0.1328,
+        "confusion_matrix": {
+          "tn": 13952,
+          "fp": 2137,
+          "fn": 83907,
+          "tp": 4
+        }
+      }
+    },
+    {
+      "seed": 52,
+      "threshold": 0.121403,
+      "validation_false_positive_rate": 0.05,
+      "metrics": {
+        "accuracy": 0.9072,
+        "precision": 0.9733,
+        "recall": 0.9145,
+        "f1": 0.943,
+        "roc_auc": 0.849,
+        "average_precision": 0.9255,
+        "false_positive_rate": 0.1309,
+        "confusion_matrix": {
+          "tn": 13983,
+          "fp": 2106,
+          "fn": 7176,
+          "tp": 76735
+        }
+      }
+    },
+    {
+      "seed": 62,
+      "threshold": 0.115267,
+      "validation_false_positive_rate": 0.05,
+      "metrics": {
+        "accuracy": 0.9069,
+        "precision": 0.9729,
+        "recall": 0.9145,
+        "f1": 0.9428,
+        "roc_auc": 0.8408,
+        "average_precision": 0.9332,
+        "false_positive_rate": 0.1328,
+        "confusion_matrix": {
+          "tn": 13953,
+          "fp": 2136,
+          "fn": 7176,
+          "tp": 76735
+        }
+      }
+    }
+  ],
+  "repeated_seed_summary": {
+    "precision": {
+      "mean": 0.6494,
+      "std": 0.4578
+    },
+    "recall": {
+      "mean": 0.6097,
+      "std": 0.4311
+    },
+    "f1": {
+      "mean": 0.6286,
+      "std": 0.4444
+    },
+    "roc_auc": {
+      "mean": 0.8435,
+      "std": 0.0039
+    },
+    "average_precision": {
+      "mean": 0.9304,
+      "std": 0.0035
+    },
+    "false_positive_rate": {
+      "mean": 0.1322,
+      "std": 0.0009
+    }
+  },
+  "random_score_baseline": {
+    "accuracy": 0.1944,
+    "precision": 0.8378,
+    "recall": 0.0496,
+    "f1": 0.0936,
+    "roc_auc": 0.4982,
+    "average_precision": 0.8388,
+    "false_positive_rate": 0.05,
+    "confusion_matrix": {
+      "tn": 15284,
+      "fp": 805,
+      "fn": 79752,
+      "tp": 4159
     }
   },
   "limitations": [
     "BETH contains host process telemetry rather than SentinelScope authentication/API events.",
     "Results validate the Isolation Forest algorithm family, not the full hybrid rule engine.",
     "The decision threshold is calibrated on the official benign-only validation split.",
-    "Class imbalance makes accuracy insufficient; recall, precision, AUROC, AP, and FPR are reported."
+    "Class imbalance makes accuracy insufficient; recall, precision, AUROC, AP, and FPR are reported.",
+    "Repeated seeds and bootstrap intervals quantify sampling and model variance but are not external validation."
   ]
 }

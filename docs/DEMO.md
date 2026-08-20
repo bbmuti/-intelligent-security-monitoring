@@ -20,7 +20,7 @@ Open `http://localhost:5173` and sign in with the analyst credentials configured
    Open Detection Lab and point to the JSON/JSONL, Linux OpenSSH, and Windows Security Event Log collectors.
 
 3. **Controlled detection — 20 seconds**
-   Run the brute-force scenario. Explain that these are safe application records processed by the same production path as collector events.
+   Run the brute-force scenario. Explain that these are safe application records processed by the same application path as collector events.
 
 4. **Explainability — 20 seconds**
    Open the new alert. Show risk, evidence, MITRE ATT&CK context, model/rule reasoning, and the status selector.
@@ -29,7 +29,7 @@ Open `http://localhost:5173` and sign in with the analyst credentials configured
    Change the finding to `investigating`, then `resolved`. Open Audit Trail and show the recorded status change.
 
 6. **Engineering proof — 10 seconds**
-   End on the README quality-gate section: CI, 80% coverage gate, Bandit, Ruff, Alembic migration, and frontend build.
+   End on the README quality-gate section: coverage, dependency audits, PostgreSQL smoke test, Windows collector validation, container builds, Bandit, Ruff, and Alembic migration.
 
 ## One-sentence pitch
 

@@ -34,14 +34,17 @@ python -m scripts.benchmark_beth \
   --output artifacts/beth-benchmark.json
 ```
 
-The script uses deterministic reservoir sampling, fits only benign training records, selects the decision threshold from the 95th percentile of the separate benign-only validation split (a 5% validation alert budget), and evaluates that frozen threshold once on the labelled test split. It reports:
+The script uses deterministic reservoir sampling, fits only benign training records, and trains three 1,000-tree Isolation Forest runs with independent fixed seeds. The operational score is the mean of those runs. Its decision threshold is selected from the 95th percentile of the separate benign-only validation ensemble scores (a 5% validation alert budget) and frozen before the labelled test split is evaluated. It reports:
 
 - precision, recall, and F1;
 - ROC-AUC and average precision;
 - false-positive rate;
 - confusion matrix;
+- deterministic 95% bootstrap intervals;
+- every individual-seed run and aggregate variation;
+- a fixed random-score baseline;
 - sampled class counts;
-- SHA-256 hashes of both input files.
+- runtime package/Python versions and SHA-256 hashes of all three input files.
 
 File hashes for all three splits, fixed seeds, feature names, sampling limits, and threshold methodology make a result reproducible. Do not commit the downloaded dataset. A generated report may be committed only when it was produced by this script without manual metric editing.
 
@@ -51,17 +54,18 @@ The committed [BETH report](../backend/artifacts/beth-benchmark.json) was genera
 
 | Metric | Test result |
 |---|---:|
-| Precision | 0.9716 |
+| Precision | 0.9729 |
 | Recall | 0.9145 |
-| F1 | 0.9422 |
-| ROC-AUC | 0.8449 |
-| Average precision | 0.9382 |
-| False-positive rate | 0.1397 |
+| F1 | 0.9428 |
+| ROC-AUC | 0.8412 |
+| Average precision | 0.9187 |
+| False-positive rate | 0.1327 |
+| FPR 95% bootstrap interval | 0.1276–0.1384 |
 
-The strong precision and recall do not cancel out the 13.97% benign test false-positive rate. That gap is recorded as a model-improvement target rather than hidden.
+The strong ensemble precision and recall do not cancel out the 13.27% benign test false-positive rate. Individual runs also show that a validation-only unsupervised threshold can be unstable under test-distribution shift even when ranking metrics remain useful. Both gaps are recorded in the versioned artifact rather than hidden. The ensemble reduces seed sensitivity, but it does not turn this result into production validation.
 
 ## Interpretation
 
 Accuracy alone is misleading for rare security events. Prioritize recall, precision, average precision, and false-positive rate. A useful detector must find attacks without producing an alert volume that analysts cannot triage.
 
-The BETH benchmark validates the anomaly-detection algorithm on real process telemetry. A separate LANL authentication benchmark is a future extension because the official comprehensive LANL authentication file is 7.2 GB compressed.
+The BETH benchmark validates the anomaly-detection algorithm family on real process telemetry. The random baseline, confidence intervals, and repeated runs make a single favorable seed harder to overstate, but no experiment here validates the full SentinelScope authentication pipeline. A separate LANL authentication benchmark is a future extension because the official comprehensive LANL authentication file is 7.2 GB compressed.

@@ -2,7 +2,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-from app.detection import DetectionEngine
+from app.detection import BehaviorModel, DetectionEngine
 
 
 def event(**overrides):
@@ -40,6 +40,14 @@ class DetectionEngineTests(unittest.TestCase):
         self.assertGreaterEqual(result.risk_score, 70)
         self.assertIn("T1110", result.mitre_technique)
 
+    def test_missing_windows_ips_are_not_correlated_as_one_attacker(self):
+        history = [event(outcome="failure", ip_address="0.0.0.0", user_id=f"user-{i}") for i in range(8)]
+        result = self.engine.analyze(
+            event(outcome="failure", ip_address="0.0.0.0", user_id="target"),
+            history,
+        )
+        self.assertNotIn("brute_force", result.triggered_rules)
+
     def test_denied_role_change_is_critical(self):
         result = self.engine.analyze(
             event(event_type="role_change", outcome="denied", endpoint="/admin/roles"), []
@@ -70,6 +78,20 @@ class DetectionEngineTests(unittest.TestCase):
         )
         self.assertGreaterEqual(result.risk_score, 50)
         self.assertIn("behavioral_anomaly", result.triggered_rules)
+
+    def test_personal_baseline_preserves_recent_ip_volume_and_is_cached(self):
+        start = datetime(2026, 8, 20, 8, 0, tzinfo=UTC)
+        baseline = [
+            event(timestamp=start + timedelta(minutes=index), event_type="api_access")
+            for index in range(30)
+        ]
+        rows = BehaviorModel._personal_baseline(baseline)
+        self.assertEqual(rows.shape, (30, 6))
+        self.assertGreater(rows[-1][-1], 0)
+        first = self.engine._personal_model(baseline)
+        second = self.engine._personal_model(baseline)
+        self.assertIs(first, second)
+        self.assertEqual(first.baseline_kind, "personal")
 
 
 if __name__ == "__main__":

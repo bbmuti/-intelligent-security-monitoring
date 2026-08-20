@@ -1,6 +1,13 @@
 import numpy as np
 
-from scripts.benchmark_beth import FEATURE_NAMES, beth_features, beth_label, metrics, select_threshold
+from scripts.benchmark_beth import (
+    FEATURE_NAMES,
+    beth_features,
+    beth_label,
+    bootstrap_intervals,
+    metrics,
+    select_threshold,
+)
 
 
 def test_beth_feature_vector_is_fixed_and_finite():
@@ -42,3 +49,12 @@ def test_threshold_is_selected_from_validation_distribution():
     scores = np.array([0.1, 0.2, 0.8, 0.9])
     threshold = select_threshold(scores, 75)
     assert np.isclose(threshold, 0.825)
+
+
+def test_bootstrap_intervals_are_deterministic_and_bounded():
+    labels = np.array([0, 0, 0, 1, 1, 1])
+    predictions = np.array([0, 1, 0, 1, 1, 0])
+    first = bootstrap_intervals(labels, predictions, repetitions=20, seed=7)
+    second = bootstrap_intervals(labels, predictions, repetitions=20, seed=7)
+    assert first == second
+    assert all(0 <= lower <= upper <= 1 for lower, upper in first.values())
