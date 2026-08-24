@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -136,7 +137,15 @@ jobs:
           JWT_SECRET: e2e-jwt-secret-with-at-least-thirty-two-characters
           ADMIN_PASSWORD: e2e-admin-password
           INGESTION_API_KEY: e2e-ingestion-key-with-sufficient-length
+          CAPTURE_PORTFOLIO_SCREENSHOTS: "1"
         run: npm run test:e2e
+      - name: Upload verified portfolio screenshots
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: portfolio-screenshots
+          path: frontend/portfolio-screenshots
+          if-no-files-found: error
+          retention-days: 7
 
   windows-collector:
     runs-on: windows-latest
