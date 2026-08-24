@@ -15,6 +15,7 @@ node_modules/
 dist/
 playwright-report/
 test-results/
+portfolio-screenshots/
 .idea/
 .vscode/
 .DS_Store
