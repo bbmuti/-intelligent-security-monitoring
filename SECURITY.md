@@ -6,7 +6,7 @@ SentinelScope is an educational defensive-security MVP and is not offered as a h
 
 ## Reporting a vulnerability
 
-Please do not disclose a suspected vulnerability in a public issue. Use the repository's [private vulnerability reporting flow](https://github.com/bbmuti/-intelligent-security-monitoring/security/advisories/new) and include:
+Please do not disclose a suspected vulnerability in a public issue. Use the repository's [private vulnerability reporting flow](https://github.com/bbmuti/SecureOps/security/advisories/new) and include:
 
 - the affected component and version or commit;
 - clear reproduction steps;

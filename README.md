@@ -1,6 +1,6 @@
 # SentinelScope — Intelligent Security Monitoring
 
-[![CI](https://github.com/bbmuti/-intelligent-security-monitoring/actions/workflows/ci.yml/badge.svg)](https://github.com/bbmuti/-intelligent-security-monitoring/actions/workflows/ci.yml)
+[![CI](https://github.com/bbmuti/SecureOps/actions/workflows/ci.yml/badge.svg)](https://github.com/bbmuti/SecureOps/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -267,7 +267,7 @@ npm run build
 npm run test:e2e       # requires Playwright Chromium
 ```
 
-Current local verification: **62 backend tests**, **7 frontend domain/component tests**, and **93.21% backend branch coverage**. The CI quality gates cover branch coverage, a browser analyst flow, a clean Alembic migration, a real PostgreSQL API smoke test, PowerShell collector syntax, Python/npm vulnerability audits (including development tooling), linting, Bandit, container builds, the deterministic model smoke evaluation, and the production frontend build.
+Current local verification: **62 backend tests**, **7 frontend domain/component tests**, and **93.43% backend branch coverage**. The CI quality gates cover branch coverage, a browser analyst flow, a clean Alembic migration, a real PostgreSQL API smoke test, PowerShell collector syntax, Python/npm vulnerability audits (including development tooling), linting, Bandit, container builds, the deterministic model smoke evaluation, and the production frontend build.
 
 ### Model evaluation scope
 
