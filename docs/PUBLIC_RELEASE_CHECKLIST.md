@@ -4,7 +4,7 @@ The repository was made public after the full history and current tree were revi
 
 ## Blocking checks
 
-- [ ] GitHub Actions is green on `main`.
+- [x] GitHub Actions is green on `main`.
 - [x] Repository history contains no real passwords, API keys, tokens, private URLs, personal data, or production logs; see `RELEASE_SECURITY_REVIEW.md`.
 - [x] `.env`, databases, downloaded datasets, coverage output, and build output remain ignored.
 - [x] Every screenshot contains synthetic identities and documentation-reserved IP addresses only.
@@ -23,4 +23,4 @@ The repository was made public after the full history and current tree were revi
 
 ## Visibility change
 
-The repository is public. CI run `32735304389` completed successfully on the release branch after the visibility change, including the secret scan, backend/PostgreSQL checks, frontend tests/build, browser E2E flow, Windows collector validation, and container builds.
+The repository is public. CI run [`34205845310`](https://github.com/bbmuti/-intelligent-security-monitoring/actions/runs/34205845310) completed successfully on `main` after the visibility change and E2E stability fix, including the secret scan, backend/PostgreSQL checks, frontend tests/build, browser E2E flow, Windows collector validation, and container builds.
