@@ -221,7 +221,7 @@ function Dashboard({ request, onLogout }) {
 
   async function runScenario(name) {
     setRunning(name); setNotice("");
-    try { const result = await request(`/api/v1/simulations/${name}`, { method: "POST" }); setNotice(`${result.events_created} events analyzed · ${result.alerts_created} alerts created`); await refresh(); }
+    try { const result = await request(`/api/v1/simulations/${name}`, { method: "POST" }); await refresh(true); setNotice(`${result.events_created} events analyzed · ${result.alerts_created} alerts created`); }
     catch (error) { setNotice(error.message); } finally { setRunning(""); }
   }
 

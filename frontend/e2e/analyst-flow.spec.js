@@ -11,8 +11,12 @@ test("analyst can generate, inspect, and triage an explainable alert", async ({ 
 
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await page.getByRole("button", { name: "Detection lab" }).click();
+  const simulationResponse = page.waitForResponse((response) =>
+    response.url().endsWith("/api/v1/simulations/brute_force") && response.request().method() === "POST"
+  );
   await page.getByRole("button", { name: /Brute-force login/ }).click();
-  await expect(page.getByText(/events analyzed/)).toBeVisible();
+  expect((await simulationResponse).ok()).toBeTruthy();
+  await expect(page.getByText(/\d+ events analyzed · \d+ alerts created/i)).toBeVisible({ timeout: 15_000 });
 
   if (capturePortfolioScreenshots) {
     await mkdir("portfolio-screenshots", { recursive: true });
