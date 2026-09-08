@@ -6,6 +6,8 @@
 
 Python, FastAPI, React, PostgreSQL, SQLAlchemy, scikit-learn, Docker, GitHub Actions
 
+Repository: https://github.com/bbmuti/-intelligent-security-monitoring
+
 - Windows Security Event Log, Linux OpenSSH ve JSON/JSONL kaynaklarından güvenlik olaylarını alan tam kapsamlı bir izleme platformu geliştirdim.
 - Kural tabanlı tespitleri Isolation Forest davranış analiziyle birleştirerek açıklanabilir 0–100 risk puanı, MITRE ATT&CK eşleştirmesi ve kanıta dayalı alarm üretimi sağladım.
 - HttpOnly cookie, CSRF koruması, atomik refresh-token ailesi rotasyonu ve replay iptali; rate limiting, idempotent veri alımı, audit log, Alembic ve PostgreSQL desteği uyguladım.
@@ -17,6 +19,8 @@ Python, FastAPI, React, PostgreSQL, SQLAlchemy, scikit-learn, Docker, GitHub Act
 **SentinelScope — Explainable Intelligent Security Monitoring Platform**
 
 Python, FastAPI, React, PostgreSQL, SQLAlchemy, scikit-learn, Docker, GitHub Actions
+
+Repository: https://github.com/bbmuti/-intelligent-security-monitoring
 
 - Built a full-stack monitoring platform that ingests security telemetry from Windows Security Event Log, Linux OpenSSH, and JSON/JSONL sources.
 - Combined deterministic detections with Isolation Forest behavior scoring to generate explainable 0–100 risk scores, evidence, and MITRE ATT&CK context.
