@@ -38,7 +38,7 @@ updates:
         update-types: ["minor", "patch"]
     ignore:
       - dependency-name: python
-        update-types: ["version-update:semver-major"]
+        versions: [">= 3.13"]
   - package-ecosystem: docker
     directory: /frontend
     schedule:
@@ -50,7 +50,7 @@ updates:
         update-types: ["minor", "patch"]
     ignore:
       - dependency-name: node
-        update-types: ["version-update:semver-major"]
+        versions: [">= 23"]
   - package-ecosystem: docker
     directory: /
     schedule:
