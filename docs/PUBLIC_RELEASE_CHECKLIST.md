@@ -1,13 +1,13 @@
 # Public Release Checklist
 
-The repository should remain private until every blocking item is checked.
+The repository was made public after the full history and current tree were reviewed for secrets. Complete the remaining repository-host settings and re-run CI on `main` before declaring the release final.
 
 ## Blocking checks
 
 - [ ] GitHub Actions is green on `main`.
 - [x] Repository history contains no real passwords, API keys, tokens, private URLs, personal data, or production logs; see `RELEASE_SECURITY_REVIEW.md`.
 - [x] `.env`, databases, downloaded datasets, coverage output, and build output remain ignored.
-- [ ] Every screenshot contains synthetic identities and documentation-reserved IP addresses only.
+- [x] Every screenshot contains synthetic identities and documentation-reserved IP addresses only.
 - [x] Demo credentials are explicit local/CI placeholders and are documented as non-reusable.
 - [x] Dependency licenses are compatible with an MIT-licensed repository.
 - [x] README limitations and security boundary still match the implementation.
@@ -16,11 +16,11 @@ The repository should remain private until every blocking item is checked.
 
 ## Presentation checks
 
-- [ ] Add two current dashboard screenshots produced from the running application.
+- [x] Add two current dashboard screenshots produced from the running application and verified by the Playwright analyst flow.
 - [x] Record the 90-second flow in `DEMO.md` without exposing local secrets or browser bookmarks.
 - [ ] Add repository topics: `cybersecurity`, `fastapi`, `react`, `isolation-forest`, `siem`, `mitre-attack`, `postgresql`, `docker`.
 - [x] Add the final public repository URL to the Turkish and English CV entries.
 
 ## Visibility change
 
-Changing GitHub visibility is a separate, deliberate action. Re-run the complete test and secret-scan suite immediately before making the repository public.
+The repository is public. CI run `32735304389` completed successfully on the release branch after the visibility change, including the secret scan, backend/PostgreSQL checks, frontend tests/build, browser E2E flow, Windows collector validation, and container builds.
