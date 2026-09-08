@@ -1,5 +1,7 @@
 """Exercise the migrated PostgreSQL-backed API in CI."""
 
+import os
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -11,7 +13,10 @@ def main() -> None:
             raise RuntimeError("PostgreSQL readiness check failed")
         login = client.post(
             "/api/v1/auth/login",
-            json={"username": "admin", "password": "ci-admin-password"},
+            json={
+                "username": os.environ.get("ADMIN_USERNAME", "admin"),
+                "password": os.environ["ADMIN_PASSWORD"],
+            },
         )
         login.raise_for_status()
         access_token = login.json()["access_token"]
